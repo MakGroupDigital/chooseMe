@@ -26,8 +26,8 @@ class _AjoutPubWidgetState extends State<AjoutPubWidget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => AjoutPubModel());
-    _model.textController ??= TextEditingController();
-    _model.textFieldFocusNode ??= FocusNode();
+    _model.textController1 ??= TextEditingController();
+    _model.textFieldFocusNode1 ??= FocusNode();
   }
 
   @override
@@ -154,8 +154,8 @@ class _AjoutPubWidgetState extends State<AjoutPubWidget> {
                             border: Border.all(color: Colors.white.withOpacity(0.1)),
                           ),
                           child: TextField(
-                            controller: _model.textController,
-                            focusNode: _model.textFieldFocusNode,
+                            controller: _model.textController1,
+                            focusNode: _model.textFieldFocusNode1,
                             maxLines: 8,
                             style: GoogleFonts.readexPro(color: Colors.white, fontSize: 16),
                             decoration: InputDecoration(

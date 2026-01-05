@@ -28,10 +28,10 @@ class _ProfilUTedtWidgetState extends State<ProfilUTedtWidget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => ProfilUTedtModel());
-    _model.nomTextController ??= TextEditingController(text: currentUserDisplayName);
-    _model.nomFocusNode ??= FocusNode();
-    _model.bioTextController ??= TextEditingController();
-    _model.bioFocusNode ??= FocusNode();
+    _model.textFieldnomTextController ??= TextEditingController(text: currentUserDisplayName);
+    _model.textFieldnomFocusNode ??= FocusNode();
+    _model.textFieldpaysTextController ??= TextEditingController();
+    _model.textFieldpaysFocusNode ??= FocusNode();
   }
 
   @override
@@ -143,8 +143,8 @@ class _ProfilUTedtWidgetState extends State<ProfilUTedtWidget> {
 
                         // Form fields
                         _buildInputField(
-                          controller: _model.nomTextController!,
-                          focusNode: _model.nomFocusNode!,
+                          controller: _model.textFieldnomTextController!,
+                          focusNode: _model.textFieldnomFocusNode!,
                           label: 'Nom complet',
                           icon: Icons.person_outline,
                         ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
@@ -152,11 +152,11 @@ class _ProfilUTedtWidgetState extends State<ProfilUTedtWidget> {
                         const SizedBox(height: 20),
 
                         _buildInputField(
-                          controller: _model.bioTextController!,
-                          focusNode: _model.bioFocusNode!,
-                          label: 'Bio',
-                          icon: Icons.edit_note,
-                          maxLines: 3,
+                          controller: _model.textFieldpaysTextController!,
+                          focusNode: _model.textFieldpaysFocusNode!,
+                          label: 'Pays',
+                          icon: Icons.flag_outlined,
+                          maxLines: 1,
                         ).animate().fadeIn(delay: 400.ms, duration: 400.ms),
 
                         const SizedBox(height: 40),
@@ -173,7 +173,7 @@ class _ProfilUTedtWidgetState extends State<ProfilUTedtWidget> {
                           child: FFButtonWidget(
                             onPressed: () async {
                               await currentUserReference!.update(createUserRecordData(
-                                displayName: _model.nomTextController!.text,
+                                displayName: _model.textFieldnomTextController!.text,
                               ));
                               context.safePop();
                             },

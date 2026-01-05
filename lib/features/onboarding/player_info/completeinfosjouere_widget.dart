@@ -31,10 +31,10 @@ class _CompleteinfosjouereWidgetState extends State<CompleteinfosjouereWidget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => CompleteinfosjouereModel());
-    _model.tailleTextController ??= TextEditingController();
-    _model.tailleFocusNode ??= FocusNode();
-    _model.poidsTextController ??= TextEditingController();
-    _model.poidsFocusNode ??= FocusNode();
+    _model.textController1 ??= TextEditingController();
+    _model.textFieldFocusNode1 ??= FocusNode();
+    _model.textController2 ??= TextEditingController();
+    _model.textFieldFocusNode2 ??= FocusNode();
   }
 
   @override
@@ -134,9 +134,9 @@ class _CompleteinfosjouereWidgetState extends State<CompleteinfosjouereWidget> {
 
                         Row(
                           children: [
-                            Expanded(child: _buildInputField(_model.tailleTextController!, _model.tailleFocusNode!, 'Taille (cm)', Icons.height)),
+                            Expanded(child: _buildInputField(_model.textController1!, _model.textFieldFocusNode1!, 'Taille (cm)', Icons.height)),
                             const SizedBox(width: 16),
-                            Expanded(child: _buildInputField(_model.poidsTextController!, _model.poidsFocusNode!, 'Poids (kg)', Icons.fitness_center)),
+                            Expanded(child: _buildInputField(_model.textController2!, _model.textFieldFocusNode2!, 'Poids (kg)', Icons.fitness_center)),
                           ],
                         ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
 

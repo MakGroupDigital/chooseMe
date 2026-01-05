@@ -26,10 +26,10 @@ class _AjoutArticleWidgetState extends State<AjoutArticleWidget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => AjoutArticleModel());
-    _model.titreTextController ??= TextEditingController();
-    _model.titreFocusNode ??= FocusNode();
-    _model.contenuTextController ??= TextEditingController();
-    _model.contenuFocusNode ??= FocusNode();
+    _model.textController1 ??= TextEditingController();
+    _model.textFieldFocusNode1 ??= FocusNode();
+    _model.textController2 ??= TextEditingController();
+    _model.textFieldFocusNode2 ??= FocusNode();
   }
 
   @override
@@ -118,8 +118,8 @@ class _AjoutArticleWidgetState extends State<AjoutArticleWidget> {
 
                         // Title field
                         _buildInputField(
-                          controller: _model.titreTextController!,
-                          focusNode: _model.titreFocusNode!,
+                          controller: _model.textController1!,
+                          focusNode: _model.textFieldFocusNode1!,
                           label: 'Titre de l\'article',
                           hint: 'Un titre accrocheur...',
                           icon: Icons.title,
@@ -129,8 +129,8 @@ class _AjoutArticleWidgetState extends State<AjoutArticleWidget> {
 
                         // Content field
                         _buildInputField(
-                          controller: _model.contenuTextController!,
-                          focusNode: _model.contenuFocusNode!,
+                          controller: _model.textController2!,
+                          focusNode: _model.textFieldFocusNode2!,
                           label: 'Contenu',
                           hint: 'Rédigez votre article...',
                           icon: Icons.article,

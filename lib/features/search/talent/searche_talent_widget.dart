@@ -301,7 +301,7 @@ class _SearcheTalentWidgetState extends State<SearcheTalentWidget> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          talent.sport.isNotEmpty ? talent.sport : 'Football',
+                          talent.discipline.isNotEmpty ? talent.discipline : 'Football',
                           style: GoogleFonts.readexPro(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
                         ),
                       ),
