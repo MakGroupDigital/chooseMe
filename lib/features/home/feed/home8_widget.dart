@@ -596,9 +596,9 @@ class _Home8WidgetState extends State<Home8Widget> with TickerProviderStateMixin
                     onTap: () {},
                   ),
                   _buildNavItem(
-                    icon: Icons.sports_kabaddi_rounded,
-                    label: 'Découvrir',
-                    onTap: () => _handleDiscoverTap(),
+                    icon: Icons.sports_soccer,
+                    label: 'Live Match',
+                    onTap: () => context.pushNamed(MatchesListWidget.routeName),
                   ),
                   _buildAddButton(theme),
                   _buildNavItem(

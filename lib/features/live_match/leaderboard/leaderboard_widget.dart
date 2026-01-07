@@ -17,7 +17,7 @@ class LeaderboardWidget extends StatefulWidget {
   const LeaderboardWidget({super.key});
 
   static String routeName = 'Leaderboard';
-  static String routePath = '/leaderboard';
+  static String routePath = 'leaderboard';
 
   @override
   State<LeaderboardWidget> createState() => _LeaderboardWidgetState();

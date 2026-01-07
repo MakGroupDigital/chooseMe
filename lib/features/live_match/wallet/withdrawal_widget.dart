@@ -17,7 +17,7 @@ class WithdrawalWidget extends StatefulWidget {
   const WithdrawalWidget({super.key});
 
   static String routeName = 'Withdrawal';
-  static String routePath = '/withdrawal';
+  static String routePath = 'withdrawal';
 
   @override
   State<WithdrawalWidget> createState() => _WithdrawalWidgetState();

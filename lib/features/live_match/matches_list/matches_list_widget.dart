@@ -14,7 +14,7 @@ class MatchesListWidget extends StatefulWidget {
   const MatchesListWidget({super.key});
 
   static String routeName = 'MatchesList';
-  static String routePath = '/live-match';
+  static String routePath = 'live-match';
 
   @override
   State<MatchesListWidget> createState() => _MatchesListWidgetState();

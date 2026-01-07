@@ -22,7 +22,7 @@ class MatchDetailWidget extends StatefulWidget {
   final String? showPrediction;
 
   static String routeName = 'MatchDetail';
-  static String routePath = '/match-detail/:matchId';
+  static String routePath = 'match-detail/:matchId';
 
   @override
   State<MatchDetailWidget> createState() => _MatchDetailWidgetState();
@@ -111,7 +111,12 @@ class _MatchDetailWidgetState extends State<MatchDetailWidget>
           
           // Vérifier que les données essentielles sont présentes
           if (match.teamAName.isEmpty || match.teamBName.isEmpty) {
-            return _buildTestMatchDetail();
+            return const Center(
+              child: Text(
+                'Données du match non disponibles',
+                style: TextStyle(color: Colors.white),
+              ),
+            );
           }
           
           return _buildMatchDetail(match);

@@ -16,7 +16,7 @@ class WalletWidget extends StatefulWidget {
   const WalletWidget({super.key});
 
   static String routeName = 'Wallet';
-  static String routePath = '/wallet';
+  static String routePath = 'wallet';
 
   @override
   State<WalletWidget> createState() => _WalletWidgetState();
