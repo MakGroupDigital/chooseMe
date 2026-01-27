@@ -1,0 +1,8 @@
+{
+  "name": "Choose-Me",
+  "description": "The premier sports social network for African talents, recruiters, and clubs with live match predictions and talent scouting.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
