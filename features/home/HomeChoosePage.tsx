@@ -434,14 +434,27 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
       <div 
         className="flex-1 overflow-y-scroll snap-y snap-mandatory custom-scrollbar"
         onScroll={(e) => {
-          // Tracker les vidéos vues pour améliorer les recommandations
           const container = e.currentTarget;
           const scrollTop = container.scrollTop;
           const containerHeight = container.clientHeight;
           const currentVideoIndex = Math.round(scrollTop / containerHeight);
           
+          // Tracker les vidéos vues
           if (feed[currentVideoIndex]) {
             setRecentlySeenVideos(prev => new Set(prev).add(feed[currentVideoIndex].id));
+            
+            // Jouer la vidéo visible et mettre en pause les autres
+            feed.forEach((_, index) => {
+              const video = document.getElementById(`video-${index}`) as HTMLVideoElement;
+              if (video) {
+                if (index === currentVideoIndex) {
+                  video.play().catch(e => console.log('Autoplay prevented:', e));
+                } else {
+                  video.pause();
+                  video.currentTime = 0;
+                }
+              }
+            });
           }
         }}
       >
@@ -490,17 +503,30 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
             </div>
           </div>
         )}
-        {!loading && !error && feed.map((post) => (
+        {!loading && !error && feed.map((post, index) => (
           <div key={post.id} className="relative h-full w-full snap-start overflow-hidden">
             {/* Vidéo HTML5 en plein écran - lecture automatique sans poster */}
             <video
+              id={`video-${index}`}
               src={post.url}
               className="w-full h-full object-cover"
-              autoPlay
+              autoPlay={index === 0}
               muted={isMuted}
               loop
               playsInline
-              preload="auto"
+              preload="metadata"
+              onPlay={() => {
+                // Mettre en pause toutes les autres vidéos
+                feed.forEach((_, i) => {
+                  if (i !== index) {
+                    const otherVideo = document.getElementById(`video-${i}`) as HTMLVideoElement;
+                    if (otherVideo) {
+                      otherVideo.pause();
+                      otherVideo.currentTime = 0;
+                    }
+                  }
+                });
+              }}
             />
 
             {/* Interactions Bar */}

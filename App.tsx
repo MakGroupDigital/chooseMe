@@ -145,11 +145,11 @@ const App: React.FC = () => {
   return (
     <DeviceMockup showNav={showNav} userType={user?.type}>
       <Routes>
-        <Route path="/" element={<Navigate to="/onboarding" replace />} />
-        <Route path="/onboarding" element={<ModernOnboardingPage />} />
+        <Route path="/" element={user ? <Navigate to="/home" replace /> : <Navigate to="/onboarding" replace />} />
+        <Route path="/onboarding" element={user ? <Navigate to="/home" replace /> : <ModernOnboardingPage />} />
         <Route path="/onboarding/register" element={<OnboardingCreateAccountPage selectedType={user?.type} />} />
         <Route path="/onboarding/type" element={<OnboardingChooseTypePage onSelect={handleSelectType} />} />
-        <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+        <Route path="/login" element={user ? <Navigate to="/home" replace /> : <LoginPage onLogin={handleLogin} />} />
         
         <Route path="/home" element={<DashboardRouter userType={user?.type || UserType.ATHLETE} />} />
         <Route path="/dashboard/athlete" element={<AthleteDashboard />} />
