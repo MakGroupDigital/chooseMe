@@ -29,11 +29,22 @@ indexHtml = indexHtml.replace(
   `<script>window.FIREBASE_WEBAPP_CONFIG = ${firebaseConfig};</script></head>`
 );
 
-// Serve static files from dist directory
-app.use(express.static(join(__dirname, 'dist')));
+// Serve static files from dist directory (JS, CSS, images, etc.)
+app.use(express.static(join(__dirname, 'dist'), {
+  setHeaders: (res, path) => {
+    // S'assurer que les fichiers JS ont le bon MIME type
+    if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
 
-// Handle SPA routing - send modified index.html
+// Handle SPA routing - send modified index.html only for HTML requests
 app.get('*', (req, res) => {
+  // Ne pas intercepter les requêtes pour les assets
+  if (req.path.includes('.')) {
+    return res.status(404).send('Not found');
+  }
   res.send(indexHtml);
 });
 
