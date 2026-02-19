@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+:root {
+  --primary-green: #208050;
+  --secondary-green: #19DB8A;
+  --accent-orange: #FF8A3C;
+}
+
+/* Theme tokens */
+:root,
+[data-theme='dark'] {
+  --app-bg: #010101;
+  --app-surface: #0a0a0a;
+  --app-text: #ffffff;
+  --app-text-muted: rgba(255, 255, 255, 0.6);
+}
+
+[data-theme='light'] {
+  --app-bg: #f4f7fb;
+  --app-surface: #ffffff;
+  --app-text: #0f172a;
+  --app-text-muted: rgba(15, 23, 42, 0.65);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Make light theme effectively visible on existing dark utility classes */
+[data-theme='light'] [class*="bg-[#050505]"],
+[data-theme='light'] [class*="bg-[#0A0A0A]"],
+[data-theme='light'] [class*="bg-black"] {
+  background-color: var(--app-surface) !important;
+}
+
+[data-theme='light'] [class*="text-white"] {
+  color: var(--app-text) !important;
+}
+
+[data-theme='light'] [class*="border-white"] {
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+.font-readex {
+  font-family: 'Readex Pro', sans-serif;
+}
+
+/* Professional Touch-First Scrollbars */
+.custom-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.custom-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-behavior: smooth;
+}
+
+/* Active States for Premium Mobile Feeling */
+.active-scale:active {
+  transform: scale(0.97);
+  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* High Performance Backgrounds */
+.bg-glass {
+  background: rgba(10, 10, 12, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Tap Highlight Disabling */
+* {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+/* Mobile specific animations */
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out forwards;
+}
