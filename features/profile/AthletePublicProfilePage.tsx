@@ -4,7 +4,7 @@ import { ChevronLeft, MapPin, Users, UserPlus, UserCheck, Activity, Trophy, Awar
 import { doc, getDoc } from 'firebase/firestore';
 import CustomVideoPlayer from '../../components/CustomVideoPlayer';
 import { getFirestoreDb, useAuth } from '../../services/firebase';
-import { UserProfile, UserType } from '../../types';
+import { UserProfile, UserType, normalizeUserType } from '../../types';
 import { getFollowers, getFollowing, followAthlete, isFollowing, unfollowAthlete } from '../../services/followService';
 import { getUserPerformanceVideos, PerformanceVideo } from '../../services/performanceService';
 import { getOrCreateConversation } from '../../services/chatService';
@@ -31,7 +31,7 @@ const AthletePublicProfilePage: React.FC<{ viewerType?: UserType }> = ({ viewerT
   const isOwnProfile = Boolean(currentUser?.uid && athleteId && currentUser.uid === athleteId);
   const canMessageAthlete =
     !isOwnProfile &&
-    (viewerType === UserType.RECRUITER || viewerType === UserType.CLUB);
+    viewerType === UserType.RECRUITER;
 
   const competencies = useMemo(() => {
     if (!profile) return [];
@@ -74,7 +74,7 @@ const AthletePublicProfilePage: React.FC<{ viewerType?: UserType }> = ({ viewerT
           uid: athleteId,
           email: data?.email || '',
           displayName: data?.displayName || data?.display_name || 'Athlète',
-          type: (data?.type as UserType) || UserType.ATHLETE,
+          type: normalizeUserType(data?.type, UserType.ATHLETE),
           country: data?.country || data?.pays || '',
           city: data?.city || data?.ville || '',
           avatarUrl: data?.avatarUrl || data?.photoUrl || data?.photo_url || '',

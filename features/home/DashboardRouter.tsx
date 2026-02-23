@@ -1,10 +1,6 @@
 import React from 'react';
-import { UserType } from '../../types';
 import HomeChoosePage from './HomeChoosePage';
-import AthleteDashboard from './dashboards/AthleteDashboard';
-import RecruiterDashboard from './dashboards/RecruiterDashboard';
-import ClubDashboard from './dashboards/ClubDashboard';
-import PressDashboard from './dashboards/PressDashboard';
+import { UserType } from '../../types';
 
 interface Props {
   userType: UserType;

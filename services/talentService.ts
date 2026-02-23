@@ -52,7 +52,12 @@ function isTalentType(rawType: unknown): boolean {
 
 function isNonTalentType(rawType: unknown): boolean {
   const value = normalizeType(rawType);
-  return value === UserType.RECRUITER || value === UserType.CLUB || value === UserType.PRESS || value === UserType.VISITOR;
+  return (
+    value === UserType.RECRUITER ||
+    value === 'club' ||
+    value === UserType.PRESS ||
+    value === UserType.VISITOR
+  );
 }
 
 function buildTalentScore(item: Omit<TalentExplorerItem, 'score' | 'rating'>): { score: number; rating: number } {

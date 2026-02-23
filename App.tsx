@@ -9,7 +9,6 @@ import LoginPage from './features/auth/LoginPage';
 import DashboardRouter from './features/home/DashboardRouter';
 import AthleteDashboard from './features/home/dashboards/AthleteDashboard';
 import RecruiterDashboard from './features/home/dashboards/RecruiterDashboard';
-import ClubDashboard from './features/home/dashboards/ClubDashboard';
 import PressDashboard from './features/home/dashboards/PressDashboard';
 import LiveMatchesPage from './features/live_match/LiveMatchesPage';
 import MatchDetailPage from './features/live_match/MatchDetailPage';
@@ -30,7 +29,7 @@ import PerformanceRecordingPage from './features/content/PerformanceRecordingPag
 import SharedVideoPage from './features/content/SharedVideoPage';
 import BottomNav from './components/BottomNav';
 import PermissionModal from './components/PermissionModal';
-import { UserType, UserProfile } from './types';
+import { UserType, UserProfile, normalizeUserType } from './types';
 import { MOCK_USER } from './constants';
 import { getFirebaseAuth, getFirestoreDb } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -99,7 +98,7 @@ const App: React.FC = () => {
           uid: fbUser.uid,
           email: fbUser.email || data?.email || '',
           displayName: data?.displayName || data?.display_name || fbUser.displayName || fbUser.email || '',
-          type: (data?.type as UserType) || UserType.VISITOR,
+          type: normalizeUserType(data?.type, UserType.VISITOR),
           country: data?.country || data?.pays || '',
           city: data?.city || data?.ville || '',
           avatarUrl: data?.avatarUrl || data?.photoUrl || data?.photo_url || data?.avatar_url || fbUser.photoURL || undefined,
@@ -208,7 +207,6 @@ const App: React.FC = () => {
         <Route path="/home" element={<DashboardRouter userType={user?.type || UserType.ATHLETE} />} />
         <Route path="/dashboard/athlete" element={<AthleteDashboard />} />
         <Route path="/dashboard/recruiter" element={<RecruiterDashboard />} />
-        <Route path="/dashboard/club" element={<ClubDashboard />} />
         <Route path="/dashboard/press" element={<PressDashboard />} />
         <Route path="/explorer" element={<ExplorerPage userType={user?.type || UserType.ATHLETE} />} />
         <Route path="/explorer/reportage/:id" element={<ReportageDetailPage />} />

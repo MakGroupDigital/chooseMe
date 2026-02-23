@@ -1,26 +1,35 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Shield, Briefcase, Camera, Globe } from 'lucide-react';
+import { User, Briefcase, Camera, Globe } from 'lucide-react';
 import Button from '../../components/Button';
 import { UserType } from '../../types';
 import { getFirebaseAuth, getFirestoreDb } from '../../services/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { deleteField, doc, updateDoc } from 'firebase/firestore';
 
 const TYPES = [
   { id: UserType.ATHLETE, label: 'Athlète / Talent', icon: <User size={28} />, desc: 'Je veux me faire recruter' },
   { id: UserType.RECRUITER, label: 'Recruteur / Agent', icon: <Briefcase size={28} />, desc: 'Je recherche des talents' },
-  { id: UserType.CLUB, label: 'Club Sportif', icon: <Shield size={28} />, desc: 'Je gère mon équipe' },
   { id: UserType.PRESS, label: 'Presse / Média', icon: <Camera size={28} />, desc: 'Je partage du contenu' },
   { id: UserType.VISITOR, label: 'Visiteur / Fan', icon: <Globe size={28} />, desc: 'Je veux juste suivre et jouer' },
 ];
 
+const RECRUITER_SUBCATEGORIES = [
+  { id: 'club', label: 'Club', desc: 'Recrutement pour un club sportif' },
+  { id: 'manager', label: 'Manager', desc: 'Gestion de carrière et placement' },
+  { id: 'agent', label: 'Agent', desc: 'Représentation et négociation' },
+  { id: 'academie', label: 'Académie', desc: 'Détection et formation de talents' },
+  { id: 'scout', label: 'Scout indépendant', desc: 'Observation et recommandation' },
+] as const;
+
 const OnboardingChooseTypePage: React.FC<{ onSelect: (type: UserType) => void }> = ({ onSelect }) => {
   const [selected, setSelected] = useState<UserType | null>(null);
+  const [selectedRecruiterSubcategory, setSelectedRecruiterSubcategory] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const handleConfirm = async () => {
     if (!selected) return;
+    if (selected === UserType.RECRUITER && !selectedRecruiterSubcategory) return;
 
     try {
       // Mettre à jour le type d'utilisateur dans Firestore
@@ -31,6 +40,8 @@ const OnboardingChooseTypePage: React.FC<{ onSelect: (type: UserType) => void }>
       if (user) {
         await updateDoc(doc(db, 'users', user.uid), {
           type: selected,
+          recruiterSubcategory:
+            selected === UserType.RECRUITER ? selectedRecruiterSubcategory : deleteField(),
           statut: selected === UserType.VISITOR ? 'ok' : 'no',
           etat: selected === UserType.VISITOR ? 'ac' : 'nv'
         });
@@ -54,7 +65,12 @@ const OnboardingChooseTypePage: React.FC<{ onSelect: (type: UserType) => void }>
         {TYPES.map((type) => (
           <div
             key={type.id}
-            onClick={() => setSelected(type.id)}
+            onClick={() => {
+              setSelected(type.id);
+              if (type.id !== UserType.RECRUITER) {
+                setSelectedRecruiterSubcategory(null);
+              }
+            }}
             className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex items-center gap-5 ${
               selected === type.id 
                 ? 'bg-[#208050]/10 border-[#19DB8A]' 
@@ -70,11 +86,34 @@ const OnboardingChooseTypePage: React.FC<{ onSelect: (type: UserType) => void }>
             </div>
           </div>
         ))}
+
+        {selected === UserType.RECRUITER && (
+          <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-4">
+            <h3 className="text-white font-semibold mb-3">Sous-catégorie recruteur</h3>
+            <div className="space-y-2">
+              {RECRUITER_SUBCATEGORIES.map((sub) => (
+                <button
+                  type="button"
+                  key={sub.id}
+                  onClick={() => setSelectedRecruiterSubcategory(sub.id)}
+                  className={`w-full text-left p-3 rounded-xl border transition-all ${
+                    selectedRecruiterSubcategory === sub.id
+                      ? 'border-[#19DB8A] bg-[#19DB8A]/10'
+                      : 'border-white/10 bg-black/20 hover:border-white/20'
+                  }`}
+                >
+                  <p className="text-white font-medium">{sub.label}</p>
+                  <p className="text-white/50 text-sm">{sub.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-8">
         <Button 
-          disabled={!selected} 
+          disabled={!selected || (selected === UserType.RECRUITER && !selectedRecruiterSubcategory)}
           onClick={handleConfirm}
           className="w-full py-4"
         >

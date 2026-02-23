@@ -2,9 +2,22 @@
 export enum UserType {
   ATHLETE = 'athlete',
   RECRUITER = 'recruteur',
-  CLUB = 'club',
   PRESS = 'presse',
   VISITOR = 'visiteur'
+}
+
+export function normalizeUserType(rawType: unknown, fallback: UserType = UserType.VISITOR): UserType {
+  const value = String(rawType || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (value === UserType.ATHLETE || value === 'talent') return UserType.ATHLETE;
+  if (value === UserType.RECRUITER || value === 'recruiter' || value === 'club') return UserType.RECRUITER;
+  if (value === UserType.PRESS || value === 'press' || value === 'media') return UserType.PRESS;
+  if (value === UserType.VISITOR || value === 'visitor' || value === 'fan') return UserType.VISITOR;
+  return fallback;
 }
 
 export interface UserProfile {

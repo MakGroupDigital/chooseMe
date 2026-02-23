@@ -15,7 +15,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ userType }) => {
     ];
 
     // Explorer context changes by role
-    if (userType === UserType.RECRUITER || userType === UserType.CLUB) {
+    if (userType === UserType.RECRUITER) {
       items.push({ icon: <IconNews />, label: 'Talents', path: '/explorer' });
     } else {
       items.push({ icon: <IconNews />, label: 'Actu', path: '/explorer' });

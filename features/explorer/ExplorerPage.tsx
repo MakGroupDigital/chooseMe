@@ -47,7 +47,7 @@ const ExplorerPage: React.FC<{ userType: UserType }> = ({ userType }) => {
   const [loadingReportages, setLoadingReportages] = useState(false);
   const [talents, setTalents] = useState<TalentExplorerItem[]>([]);
   const [loadingTalents, setLoadingTalents] = useState(false);
-  const isScout = userType === UserType.RECRUITER || userType === UserType.CLUB;
+  const isScout = userType === UserType.RECRUITER;
   const navigate = useNavigate();
 
   useEffect(() => {
