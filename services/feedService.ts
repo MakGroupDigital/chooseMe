@@ -6,6 +6,104 @@ import { sortVideosByAlgorithm } from './feedAlgorithm';
 // Cache pour les infos utilisateur
 const userCache = new Map<string, { displayName: string; avatarUrl: string }>();
 
+const VIDEO_URL_FIELDS = [
+  'cloudinaryUrl',
+  'cloudinaryVideoUrl',
+  'secure_url',
+  'secureUrl',
+  'videoUrl',
+  'video_url',
+  'video',
+  'postVido',
+  'post_vido',
+  'postVideo',
+  'post_video',
+  'mediaUrl',
+  'media_url',
+  'fileUrl',
+  'file_url',
+  'url'
+];
+
+const THUMBNAIL_FIELDS = [
+  'thumbnailUrl',
+  'thumbnail_url',
+  'thumbnail',
+  'posterUrl',
+  'poster_url',
+  'poster',
+  'post_photo'
+];
+
+const isPlayableVideoUrl = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false;
+
+  const url = value.trim();
+  if (!/^https?:\/\//i.test(url)) return false;
+
+  const lowerUrl = url.toLowerCase();
+  return (
+    lowerUrl.includes('res.cloudinary.com') ||
+    lowerUrl.includes('/video/upload/') ||
+    lowerUrl.includes('firebasestorage.googleapis.com') ||
+    /\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/i.test(lowerUrl)
+  );
+};
+
+const findUrlInValue = (value: unknown, preferCloudinary: boolean): string | null => {
+  if (isPlayableVideoUrl(value)) {
+    const url = value.trim();
+    if (!preferCloudinary || url.includes('res.cloudinary.com')) return url;
+  }
+
+  if (!value || typeof value !== 'object') return null;
+
+  const values = Array.isArray(value) ? value : Object.values(value);
+  const fallbackUrls: string[] = [];
+
+  for (const item of values) {
+    if (isPlayableVideoUrl(item)) {
+      const url = item.trim();
+      if (url.includes('res.cloudinary.com')) return url;
+      fallbackUrls.push(url);
+      continue;
+    }
+
+    if (item && typeof item === 'object') {
+      const nested = findUrlInValue(item, preferCloudinary);
+      if (nested) return nested;
+    }
+  }
+
+  return preferCloudinary ? fallbackUrls[0] || null : null;
+};
+
+const getVideoUrl = (data: Record<string, any>): string => {
+  const directCandidates = VIDEO_URL_FIELDS
+    .map((field) => data[field])
+    .filter((value) => typeof value === 'string' && value.trim()) as string[];
+
+  const cloudinaryCandidate = directCandidates.find((url) => url.includes('res.cloudinary.com'));
+  if (cloudinaryCandidate && isPlayableVideoUrl(cloudinaryCandidate)) {
+    return cloudinaryCandidate.trim();
+  }
+
+  for (const value of directCandidates) {
+    if (isPlayableVideoUrl(value)) return value.trim();
+  }
+
+  return findUrlInValue(data, true) || '';
+};
+
+const getThumbnailUrl = (data: Record<string, any>, fallback = ''): string => {
+  for (const field of THUMBNAIL_FIELDS) {
+    const value = data[field];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+
+  return fallback;
+};
+
 /**
  * Récupère les infos utilisateur avec cache
  */
@@ -77,7 +175,7 @@ export async function fetchVideoFeed(options?: {
       for (const docSnap of performancesSnap.docs) {
         const data = docSnap.data() as any;
 
-        const videoUrl = data.videoUrl?.trim();
+        const videoUrl = getVideoUrl(data);
         if (!videoUrl) continue;
 
         // Récupérer l'ID utilisateur depuis le chemin
@@ -115,7 +213,7 @@ export async function fetchVideoFeed(options?: {
             '',
           type: 'video',
           url: videoUrl,
-          thumbnail: data.thumbnailUrl || '/assets/images/app_launcher_icon.png',
+          thumbnail: getThumbnailUrl(data, '/assets/images/app_launcher_icon.png'),
           caption: data.caption || data.description || '',
           likes: data.likes || 0,
           shares: data.shares || 0,
@@ -143,8 +241,7 @@ export async function fetchVideoFeed(options?: {
       for (const docSnap of publicationSnap.docs) {
         const data = docSnap.data() as any;
 
-        const rawUrl = (data.postVido as string | undefined) ?? (data.post_vido as string | undefined);
-        const videoUrl = rawUrl?.trim();
+        const videoUrl = getVideoUrl(data);
         if (!videoUrl) continue;
 
         // Récupérer l'ID utilisateur depuis le chemin
@@ -194,7 +291,7 @@ export async function fetchVideoFeed(options?: {
             '',
           type: 'video',
           url: videoUrl,
-          thumbnail: data.post_photo || '',
+          thumbnail: getThumbnailUrl(data, data.post_photo || ''),
           caption: data.post_description || '',
           likes: Array.isArray(data.likes) ? data.likes.length : 0,
           shares: data.num_votes ?? 0,

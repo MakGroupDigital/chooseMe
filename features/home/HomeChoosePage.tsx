@@ -36,6 +36,7 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
   const [recentlySeenVideos, setRecentlySeenVideos] = useState<Set<string>>(new Set());
   const [autoplayEnabled, setAutoplayEnabled] = useState(true);
   const [dataSaverEnabled, setDataSaverEnabled] = useState(false);
+  const [videoErrors, setVideoErrors] = useState<Set<string>>(new Set());
 
   const userId = currentUser?.uid || '';
 
@@ -65,6 +66,7 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
         if (videos.length > 0) {
           setAllVideos(videos);
           setFeed(videos);
+          setVideoErrors(new Set());
           
           // Charger les états de likes pour l'utilisateur EN ARRIÈRE-PLAN
           if (userId) {
@@ -546,12 +548,33 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
             <video
               id={`video-${index}`}
               src={post.url}
+              poster={post.thumbnail || post.userAvatar || '/assets/images/app_launcher_icon.png'}
               className="w-full h-full object-cover"
               autoPlay={autoplayEnabled && index === 0}
               muted={isMuted}
               loop
               playsInline
               preload={dataSaverEnabled ? 'none' : 'metadata'}
+              onError={(event) => {
+                const video = event.currentTarget;
+                console.warn('Lecture vidéo impossible:', {
+                  id: post.id,
+                  url: post.url,
+                  networkState: video.networkState,
+                  readyState: video.readyState,
+                  errorCode: video.error?.code,
+                  errorMessage: video.error?.message
+                });
+                setVideoErrors((prev) => new Set(prev).add(post.id));
+              }}
+              onLoadedData={() => {
+                setVideoErrors((prev) => {
+                  if (!prev.has(post.id)) return prev;
+                  const next = new Set(prev);
+                  next.delete(post.id);
+                  return next;
+                });
+              }}
               onPlay={() => {
                 // Mettre en pause toutes les autres vidéos
                 feed.forEach((_, i) => {
@@ -565,6 +588,20 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
                 });
               }}
             />
+
+            {videoErrors.has(post.id) && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/70 px-6 text-center">
+                <div className="max-w-xs rounded-3xl border border-white/10 bg-black/55 p-5 backdrop-blur-xl">
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
+                    <span className="text-2xl">📹</span>
+                  </div>
+                  <p className="text-sm font-bold text-white">Vidéo indisponible</p>
+                  <p className="mt-2 text-xs leading-relaxed text-white/60">
+                    Le fichier vidéo ne peut pas être chargé depuis le stockage pour le moment.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Gradient overlay pour meilleure lisibilité */}
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40 pointer-events-none" />
