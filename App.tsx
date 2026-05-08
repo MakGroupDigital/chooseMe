@@ -30,6 +30,7 @@ import PerformanceRecordingPage from './features/content/PerformanceRecordingPag
 import SharedVideoPage from './features/content/SharedVideoPage';
 import BottomNav from './components/BottomNav';
 import PermissionModal from './components/PermissionModal';
+import PwaInstallBanner from './components/PwaInstallBanner';
 import { UserType, UserProfile } from './types';
 import { MOCK_USER } from './constants';
 import { getFirebaseAuth, getFirestoreDb } from './services/firebase';
@@ -231,6 +232,7 @@ const App: React.FC = () => {
         
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
+      <PwaInstallBanner hasBottomNav={showNav} />
     </DeviceMockup>
   );
 };

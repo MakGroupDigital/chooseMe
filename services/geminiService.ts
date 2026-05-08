@@ -1,10 +1,25 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-// Initialize the GoogleGenAI client with the API key exclusively from process.env.API_KEY.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const apiKey =
+  import.meta.env.VITE_GEMINI_API_KEY ||
+  import.meta.env.VITE_GOOGLE_AI_API_KEY ||
+  (typeof process !== 'undefined' ? process.env?.API_KEY : undefined);
+
+const getGeminiClient = () => {
+  if (!apiKey) {
+    return null;
+  }
+
+  return new GoogleGenAI({ apiKey });
+};
 
 export const getTalentInsight = async (playerName: string, stats: any) => {
+  const ai = getGeminiClient();
+  if (!ai) {
+    return "Analyse indisponible pour le moment.";
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -21,6 +36,11 @@ export const getTalentInsight = async (playerName: string, stats: any) => {
 };
 
 export const getMatchPredictionInsight = async (match: any) => {
+  const ai = getGeminiClient();
+  if (!ai) {
+    return null;
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
