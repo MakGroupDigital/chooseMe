@@ -53,10 +53,11 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [previewPlaying, setPreviewPlaying] = useState(true);
-  const [previewMuted, setPreviewMuted] = useState(false);
+  const [previewMuted, setPreviewMuted] = useState(true);
   const [previewCurrentTime, setPreviewCurrentTime] = useState(0);
   const [previewDuration, setPreviewDuration] = useState(0);
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
+  const [recordingError, setRecordingError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [hdMode, setHdMode] = useState(true);
 
@@ -227,32 +228,17 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
     if (!stream || !videoRef.current) return;
 
     chunksRef.current = [];
+    setRecordingError('');
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    if (hdMode) {
-      canvas.width = 2160;
-      canvas.height = 3840;
-    } else {
-      canvas.width = 1080;
-      canvas.height = 1920;
-    }
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Créer un stream depuis le canvas
-    const canvasStream = canvas.captureStream(30);
-
-    stream.getAudioTracks().forEach(track => {
-      canvasStream.addTrack(track);
-    });
-
-    const videoBitsPerSecond = hdMode ? 8000000 : 4000000;
+    const videoBitsPerSecond = hdMode ? 4000000 : 2500000;
     const mimeType = getBestMimeType();
+    const recordableTracks = [
+      ...stream.getVideoTracks(),
+      ...stream.getAudioTracks().filter((track) => track.enabled)
+    ];
+    const recordingStream = new MediaStream(recordableTracks);
 
-    const recorder = new MediaRecorder(canvasStream, mimeType ? {
+    const recorder = new MediaRecorder(recordingStream, mimeType ? {
       mimeType,
       videoBitsPerSecond
     } : {
@@ -268,7 +254,15 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
     recorder.onstop = () => {
       const resolvedType = recorder.mimeType || mimeType || 'video/webm';
       const blob = new Blob(chunksRef.current, { type: resolvedType });
+      if (!blob.size) {
+        setRecordingError("La vidéo enregistrée est vide. Recommencez l'enregistrement.");
+        setRecordedBlob(null);
+        setRecordedUrl(null);
+        cancelTimers();
+        return;
+      }
       const url = URL.createObjectURL(blob);
+      setRecordingError('');
       setRecordedBlob(blob);
       setRecordedUrl(url);
       cancelTimers();
@@ -277,7 +271,7 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
       setStream(null);
     };
 
-    recorder.start();
+    recorder.start(250);
     mediaRecorderRef.current = recorder;
     setRecording(true);
     setRecordingTime(0);
@@ -289,79 +283,11 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
         stopRecording();
       }
     }, realDurationLimit * 1000);
-
-    const drawFrame = () => {
-      if (!videoRef.current || !ctx || !mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') {
-        return;
-      }
-
-      ctx.save();
-
-      // Calculer les dimensions pour remplir le canvas en portrait
-      const video = videoRef.current;
-      const videoWidth = video.videoWidth;
-      const videoHeight = video.videoHeight;
-      if (!videoWidth || !videoHeight) {
-        ctx.restore();
-        animationFrameRef.current = requestAnimationFrame(drawFrame);
-        return;
-      }
-      const canvasWidth = canvas.width;
-      const canvasHeight = canvas.height;
-
-      // Calculer le ratio pour remplir le canvas
-      const videoRatio = videoWidth / videoHeight;
-      const canvasRatio = canvasWidth / canvasHeight;
-
-      let drawWidth, drawHeight, offsetX, offsetY;
-
-      if (videoRatio > canvasRatio) {
-        // Vidéo plus large
-        drawHeight = canvasHeight;
-        drawWidth = canvasHeight * videoRatio;
-        offsetX = (canvasWidth - drawWidth) / 2;
-        offsetY = 0;
-      } else {
-        // Vidéo plus haute
-        drawWidth = canvasWidth;
-        drawHeight = canvasWidth / videoRatio;
-        offsetX = 0;
-        offsetY = (canvasHeight - drawHeight) / 2;
-      }
-
-      ctx.filter = getComposedFilter();
-
-      const zoomedWidth = drawWidth * zoom;
-      const zoomedHeight = drawHeight * zoom;
-      const zoomedX = offsetX - (zoomedWidth - drawWidth) / 2;
-      const zoomedY = offsetY - (zoomedHeight - drawHeight) / 2;
-
-      if (cameraFacing === 'user') {
-        try {
-          ctx.translate(canvasWidth, 0);
-          ctx.scale(-1, 1);
-          ctx.drawImage(video, canvasWidth - zoomedX - zoomedWidth, zoomedY, zoomedWidth, zoomedHeight);
-        } catch {
-          // Si la frame n'est pas encore prête, on continue la boucle.
-        }
-      } else {
-        try {
-          ctx.drawImage(video, zoomedX, zoomedY, zoomedWidth, zoomedHeight);
-        } catch {
-          // Si la frame n'est pas encore prête, on continue la boucle.
-        }
-      }
-
-      ctx.restore();
-
-      animationFrameRef.current = requestAnimationFrame(drawFrame);
-    };
-
-    drawFrame();
   };
 
   const startRecording = async () => {
     if (!stream || recording || countdownLeft !== null) return;
+    setRecordingError('');
 
     if (countdown > 0) {
       setCountdownLeft(countdown);
@@ -385,6 +311,7 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.requestData();
       mediaRecorderRef.current.stop();
       setRecording(false);
       mediaRecorderRef.current = null;
@@ -419,6 +346,7 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
     }
     setRecordedUrl(null);
     setRecordedBlob(null);
+    setRecordingError('');
     setCountdownLeft(null);
     cancelTimers();
     startCamera();
@@ -443,6 +371,7 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
     const url = URL.createObjectURL(file);
     setRecordedBlob(file);
     setRecordedUrl(url);
+    setRecordingError('');
   };
 
   const formatTime = (seconds: number) => {
@@ -483,12 +412,27 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const playPreviewVideo = useCallback(() => {
+    const video = previewVideoRef.current;
+    if (!video) return;
+
+    video.muted = true;
+    const playPromise = video.play();
+    if (playPromise) {
+      playPromise
+        .then(() => setPreviewPlaying(true))
+        .catch(() => setPreviewPlaying(false));
+    } else {
+      setPreviewPlaying(true);
+    }
+  }, []);
+
   const togglePreviewPlay = () => {
     const video = previewVideoRef.current;
     if (!video) return;
+
     if (video.paused) {
-      video.play().catch(() => {});
-      setPreviewPlaying(true);
+      playPreviewVideo();
     } else {
       video.pause();
       setPreviewPlaying(false);
@@ -536,17 +480,25 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
       setPreviewCurrentTime(0);
       setPreviewDuration(0);
       setPreviewPlaying(true);
+      setPreviewMuted(true);
       return;
     }
-    const video = previewVideoRef.current;
-    if (!video) return;
-    video.currentTime = 0;
-    video.muted = previewMuted;
-    video.play().then(() => {
-      setPreviewPlaying(true);
-    }).catch(() => {
-      setPreviewPlaying(false);
-    });
+    setPreviewCurrentTime(0);
+    setPreviewPlaying(false);
+    setPreviewMuted(true);
+
+    const timeoutId = window.setTimeout(() => {
+      const video = previewVideoRef.current;
+      if (!video) return;
+      video.currentTime = 0;
+      video.muted = true;
+      video.load();
+      video.play()
+        .then(() => setPreviewPlaying(true))
+        .catch(() => setPreviewPlaying(false));
+    }, 150);
+
+    return () => window.clearTimeout(timeoutId);
   }, [recordedUrl]);
 
   return (
@@ -563,13 +515,26 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
               loop
               muted={previewMuted}
               playsInline
+              preload="auto"
               onClick={togglePreviewPlay}
-              onLoadedMetadata={(e) => setPreviewDuration(e.currentTarget.duration || 0)}
+              onLoadedMetadata={(e) => {
+                setPreviewDuration(e.currentTarget.duration || 0);
+              }}
               onTimeUpdate={(e) => setPreviewCurrentTime(e.currentTarget.currentTime)}
               onPlay={() => setPreviewPlaying(true)}
               onPause={() => setPreviewPlaying(false)}
             />
-            <div className="absolute left-3 right-3 bottom-[13rem] z-30">
+            {!previewPlaying && (
+              <button
+                type="button"
+                onClick={togglePreviewPlay}
+                className="absolute left-1/2 top-1/2 z-30 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-black shadow-2xl"
+                aria-label="Lire la vidéo enregistrée"
+              >
+                <Play size={28} fill="currentColor" />
+              </button>
+            )}
+            <div className="absolute left-3 right-3 bottom-28 z-30">
               <div className="bg-black/60 border border-white/15 backdrop-blur-lg rounded-2xl px-3 py-2.5">
                 <div className="flex items-center gap-2">
                   <button
@@ -950,7 +915,7 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
 
       {/* Contrôles après enregistrement */}
       {recordedUrl && (
-        <div className="bg-gradient-to-t from-black via-black/95 to-transparent px-6 pt-6 pb-28 safe-area-bottom flex gap-3">
+        <div className="bg-gradient-to-t from-black via-black/95 to-transparent px-6 pt-6 pb-6 safe-area-bottom flex gap-3">
           <button
             onClick={retakeVideo}
             className="flex-1 py-4 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white font-bold hover:bg-white/20 transition-all"
@@ -959,11 +924,18 @@ const CreateContentPage: React.FC<{ userType: UserType }> = ({ userType }) => {
           </button>
           <button
             onClick={goToDescriptionPage}
+            disabled={!recordedBlob}
             className="flex-1 py-4 rounded-full bg-[#19DB8A] text-black font-bold flex items-center justify-center gap-2 hover:bg-[#19DB8A]/90 transition-all"
           >
             <Check size={20} />
             Continuer
           </button>
+        </div>
+      )}
+
+      {recordingError && (
+        <div className="absolute left-4 right-4 bottom-28 z-40 rounded-2xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm font-semibold text-red-100 backdrop-blur-md">
+          {recordingError}
         </div>
       )}
 

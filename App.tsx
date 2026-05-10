@@ -28,6 +28,7 @@ import CreateContentPage from './features/content/CreateContentPage';
 import VideoDescriptionPage from './features/content/VideoDescriptionPage';
 import PerformanceRecordingPage from './features/content/PerformanceRecordingPage';
 import SharedVideoPage from './features/content/SharedVideoPage';
+import AdminDashboardPage from './features/admin/AdminDashboardPage';
 import BottomNav from './components/BottomNav';
 import PermissionModal from './components/PermissionModal';
 import PwaInstallBanner from './components/PwaInstallBanner';
@@ -180,8 +181,8 @@ const App: React.FC = () => {
 
   if (loading) return <SplashPage />;
 
-  const hideNavOn = ['/onboarding', '/login', '/onboarding/type', '/onboarding/register', '/splash', '/video-description', '/record-performance', '/settings', '/settings/become-athlete'];
-  const hideNavByPrefix: string[] = [];
+  const hideNavOn = ['/onboarding', '/login', '/onboarding/type', '/onboarding/register', '/splash', '/create-content', '/video-description', '/record-performance', '/settings', '/settings/become-athlete'];
+  const hideNavByPrefix: string[] = ['/admin'];
   const showNav =
     !hideNavOn.includes(location.pathname) &&
     !hideNavByPrefix.some((prefix) => location.pathname.startsWith(prefix)) &&
@@ -229,6 +230,7 @@ const App: React.FC = () => {
         <Route path="/settings/become-athlete" element={<BecomeAthletePage />} />
         <Route path="/athlete/:athleteId" element={<AthletePublicProfilePage viewerType={user?.type} />} />
         <Route path="/video/:videoId" element={<SharedVideoPage />} />
+        <Route path="/admin" element={<AdminDashboardPage />} />
         
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bell, CheckCircle2, Download, Smartphone } from 'lucide-react';
+import { Bell, CheckCircle2, Download, Smartphone, X } from 'lucide-react';
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -16,11 +16,17 @@ interface PwaInstallBannerProps {
   hasBottomNav?: boolean;
 }
 
+const DISMISSED_SESSION_KEY = 'choose-me-pwa-install-dismissed-session';
+
 const PwaInstallBanner: React.FC<PwaInstallBannerProps> = ({ hasBottomNav = false }) => {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [showFallback, setShowFallback] = useState(false);
+  const [isDismissedForSession, setIsDismissedForSession] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem(DISMISSED_SESSION_KEY) === 'true';
+  });
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
 
   const isIOS = useMemo(() => {
@@ -51,6 +57,7 @@ const PwaInstallBanner: React.FC<PwaInstallBannerProps> = ({ hasBottomNav = fals
       setIsStandalone(true);
       setInstallPrompt(null);
       setShowFallback(false);
+      sessionStorage.removeItem(DISMISSED_SESSION_KEY);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -102,16 +109,29 @@ const PwaInstallBanner: React.FC<PwaInstallBannerProps> = ({ hasBottomNav = fals
     }
   };
 
-  if (isStandalone) return null;
+  const dismissForSession = () => {
+    sessionStorage.setItem(DISMISSED_SESSION_KEY, 'true');
+    setIsDismissedForSession(true);
+  };
+
+  if (isStandalone || isDismissedForSession) return null;
 
   return (
     <div
-      className={`fixed inset-x-3 z-[90] sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-[430px] ${
+      className={`fixed inset-x-3 z-[90] md:bottom-auto md:left-auto md:right-6 md:top-6 md:w-[430px] ${
         hasBottomNav ? 'bottom-[7.25rem]' : 'bottom-3'
       }`}
     >
       <div className="overflow-hidden rounded-3xl border border-white/15 bg-[#06150f]/95 text-white shadow-2xl shadow-black/40 backdrop-blur-2xl">
         <div className="relative p-4 sm:p-5">
+          <button
+            type="button"
+            onClick={dismissForSession}
+            aria-label="Masquer l’installation pour cette session"
+            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white/70 transition hover:bg-white/15 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
           <div className="flex gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-[#208050] shadow-xl sm:h-14 sm:w-14">
               <Smartphone className="h-6 w-6 sm:h-7 sm:w-7" />

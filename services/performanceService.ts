@@ -1,6 +1,5 @@
 import { getFirebaseApp } from './firebase';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getFirestore, collection, addDoc, serverTimestamp, getDocs, onSnapshot, doc, updateDoc, increment } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, serverTimestamp, getDocs, onSnapshot, doc, updateDoc, increment, deleteDoc, getDoc } from 'firebase/firestore';
 
 export interface PerformanceVideo {
   id?: string;
@@ -17,6 +16,51 @@ export interface PerformanceVideo {
   shares: number;
   processed?: boolean;
   format?: string;
+  cloudinaryPublicId?: string;
+  storageProvider?: string;
+}
+
+interface CloudinaryUploadResult {
+  provider: 'cloudinary';
+  videoUrl: string;
+  secureUrl: string;
+  thumbnailUrl?: string;
+  publicId: string;
+  resourceType?: string;
+  format?: string;
+  bytes?: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+}
+
+async function uploadVideoToCloudinary(userId: string, videoBlob: Blob): Promise<CloudinaryUploadResult> {
+  const formData = new FormData();
+  const rawMimeType = videoBlob.type?.startsWith('video/') ? videoBlob.type : 'video/webm';
+  const mimeType = rawMimeType.split(';')[0] || 'video/webm';
+  const extension = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+  const uploadBlob = new Blob([videoBlob], { type: mimeType });
+  formData.append('file', uploadBlob, `performance.${extension}`);
+  formData.append('userId', userId);
+
+  const response = await fetch('/api/performance-media', {
+    method: 'POST',
+    body: formData
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok || !payload?.videoUrl) {
+    const detailValue = typeof payload?.detail === 'string'
+      ? payload.detail
+      : payload?.detail
+        ? JSON.stringify(payload.detail)
+        : '';
+    const detail = detailValue ? ` (${detailValue})` : '';
+    throw new Error(`${payload?.error || 'Impossible d’uploader la vidéo sur Cloudinary.'}${detail}`);
+  }
+
+  return payload as CloudinaryUploadResult;
 }
 
 /**
@@ -31,26 +75,19 @@ export async function uploadPerformanceVideo(
   title?: string
 ): Promise<string> {
   try {
-    const storage = getStorage(getFirebaseApp());
     const db = getFirestore(getFirebaseApp());
 
     console.log('📤 Début upload performance video');
     console.log('  - User ID:', userId);
     console.log('  - User Name:', userName);
     console.log('  - Blob size:', videoBlob.size, 'bytes');
-
-    // Upload la vidéo dans Storage
-    const fileName = `performances/${userId}/${Date.now()}_performance.webm`;
-    const storageRef = ref(storage, fileName);
     
-    console.log('  - Storage path:', fileName);
-    console.log('  - Uploading to Storage...');
-    
-    await uploadBytes(storageRef, videoBlob);
-    const videoUrl = await getDownloadURL(storageRef);
+    console.log('  - Uploading to Cloudinary...');
+    const media = await uploadVideoToCloudinary(userId, videoBlob);
+    const videoUrl = media.videoUrl;
 
-    console.log('  ✓ Video uploaded to Storage');
-    console.log('  - Download URL:', videoUrl);
+    console.log('  ✓ Video uploaded to Cloudinary');
+    console.log('  - Secure URL:', videoUrl);
 
     // Sauvegarde les métadonnées dans Firestore
     const performanceRef = collection(db, 'users', userId, 'performances');
@@ -60,6 +97,11 @@ export async function uploadPerformanceVideo(
     
     const docRef = await addDoc(performanceRef, {
       videoUrl,
+      secure_url: media.secureUrl,
+      cloudinaryUrl: media.secureUrl,
+      cloudinaryPublicId: media.publicId,
+      thumbnailUrl: media.thumbnailUrl || '',
+      storageProvider: 'cloudinary',
       caption,
       title: title || '',
       createdAt: serverTimestamp(),
@@ -68,7 +110,12 @@ export async function uploadPerformanceVideo(
       shares: 0,
       userName,
       userAvatar: userAvatar || '',
-      userId
+      userId,
+      format: media.format || '',
+      duration: media.duration || null,
+      width: media.width || null,
+      height: media.height || null,
+      bytes: media.bytes || videoBlob.size
     });
 
     console.log('  ✓ Metadata saved to Firestore');
@@ -116,7 +163,9 @@ export async function getUserPerformanceVideos(userId: string): Promise<Performa
         comments: data.comments || 0,
         shares: data.shares || 0,
         processed: data.processed || false,
-        format: data.format || 'webm'
+        format: data.format || 'webm',
+        cloudinaryPublicId: data.cloudinaryPublicId || data.publicId || '',
+        storageProvider: data.storageProvider || ''
       });
     });
 
@@ -165,7 +214,9 @@ export function listenToPerformanceVideos(
             comments: data.comments || 0,
             shares: data.shares || 0,
             processed: data.processed || false,
-            format: data.format || 'webm'
+            format: data.format || 'webm',
+            cloudinaryPublicId: data.cloudinaryPublicId || data.publicId || '',
+            storageProvider: data.storageProvider || ''
           });
         });
 
@@ -250,5 +301,52 @@ export async function incrementVideoComments(userId: string, videoId: string): P
     console.log('✅ Compteur de commentaires incrémenté pour la vidéo:', videoId);
   } catch (e) {
     console.error('❌ Erreur lors de l\'incrémentation des commentaires:', e);
+  }
+}
+
+export async function updatePerformanceVideo(
+  userId: string,
+  videoId: string,
+  updates: { title?: string; caption?: string }
+): Promise<void> {
+  try {
+    const db = getFirestore(getFirebaseApp());
+    const videoRef = doc(db, 'users', userId, 'performances', videoId);
+
+    await updateDoc(videoRef, {
+      title: updates.title || '',
+      caption: updates.caption || '',
+      updatedAt: serverTimestamp()
+    });
+  } catch (e) {
+    console.error('❌ Erreur modification vidéo:', e);
+    throw new Error('Impossible de modifier la vidéo.');
+  }
+}
+
+export async function deletePerformanceVideo(userId: string, videoId: string): Promise<void> {
+  try {
+    const db = getFirestore(getFirebaseApp());
+    const videoRef = doc(db, 'users', userId, 'performances', videoId);
+    const snap = await getDoc(videoRef);
+    const data = snap.data() as any;
+
+    if (data?.cloudinaryPublicId) {
+      await fetch('/api/cloudinary/delete-media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          publicId: data.cloudinaryPublicId,
+          resourceType: 'video'
+        })
+      }).catch((error) => {
+        console.warn('Suppression Cloudinary ignorée:', error);
+      });
+    }
+
+    await deleteDoc(videoRef);
+  } catch (e) {
+    console.error('❌ Erreur suppression vidéo:', e);
+    throw new Error('Impossible de supprimer la vidéo.');
   }
 }

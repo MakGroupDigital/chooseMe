@@ -430,36 +430,43 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
   };
 
   return (
-    <div className="w-full h-screen flex flex-col bg-[#050505] overflow-hidden">
+    <div className="relative flex h-full min-h-[100dvh] w-full flex-col overflow-hidden bg-[#050505]">
       {/* Dynamic Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 px-4 py-3 flex justify-between items-center pointer-events-none bg-black/40 backdrop-blur-md border-b border-white/5">
-        <div className="flex gap-2 pointer-events-auto bg-black/40 rounded-full px-1 py-1 border border-white/10 backdrop-blur-md">
+      <header className="absolute left-0 right-0 top-0 z-50 flex items-center justify-between gap-3 border-b border-white/10 bg-black/55 px-3 pt-3 pb-2 pointer-events-none shadow-[0_14px_34px_rgba(0,0,0,0.38)] backdrop-blur-xl">
+        <div className="pointer-events-auto flex min-w-0 flex-1 gap-1 rounded-full border border-white/10 bg-white/[0.06] p-1 backdrop-blur-xl">
           <button 
             onClick={() => setActiveTab('all')}
-            className={`text-xs md:text-sm font-readex font-semibold tracking-tight px-2 md:px-3 py-1 rounded-full transition-all ${
+            className={`flex-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-extrabold tracking-tight transition-all ${
               activeTab === 'all' 
-                ? 'text-white bg-[#208050]' 
-                : 'text-white/40'
+                ? 'bg-[#19DB8A] text-black shadow-[0_8px_20px_rgba(25,219,138,0.25)]' 
+                : 'text-white/55 hover:text-white'
             }`}
           >
             #ChooseTalent
           </button>
           <button 
             onClick={() => setActiveTab('following')}
-            className={`text-xs md:text-sm font-readex font-semibold tracking-tight px-2 md:px-3 py-1 rounded-full transition-all ${
+            className={`flex-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-extrabold tracking-tight transition-all ${
               activeTab === 'following' 
-                ? 'text-white bg-[#208050]' 
-                : 'text-white/40'
+                ? 'bg-[#19DB8A] text-black shadow-[0_8px_20px_rgba(25,219,138,0.25)]' 
+                : 'text-white/55 hover:text-white'
             }`}
           >
             Abonnements
           </button>
         </div>
-        <div className="flex gap-2 pointer-events-auto">
-          <button className="p-2 bg-black/20 backdrop-blur-md rounded-full border border-white/10 text-white">
-            <Bell size={18} />
+        <div className="flex shrink-0 gap-2 pointer-events-auto">
+          <button
+            onClick={toggleMute}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white backdrop-blur-xl transition-colors hover:text-[#19DB8A]"
+            aria-label={isMuted ? 'Activer le son' : 'Couper le son'}
+          >
+            {isMuted ? <IconVolumeMuted size={20} /> : <IconVolume size={20} />}
           </button>
-          <div className="w-9 h-9 rounded-full border-2 border-[#19DB8A] overflow-hidden bg-white/10">
+          <button className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white backdrop-blur-xl">
+            <Bell size={17} />
+          </button>
+          <div className="h-10 w-10 overflow-hidden rounded-full border-2 border-[#19DB8A] bg-white/10 shadow-[0_0_0_4px_rgba(25,219,138,0.1)]">
             <img 
               src={currentUserData?.avatarUrl || currentUser?.photoURL || '/assets/images/app_launcher_icon.png'} 
               alt="Me" 
@@ -471,7 +478,7 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
 
       {/* Vertical Performance Feed */}
       <div 
-        className="flex-1 w-full overflow-y-scroll snap-y snap-mandatory custom-scrollbar pt-16 pb-20"
+        className="custom-scrollbar h-full w-full flex-1 snap-y snap-mandatory overflow-y-scroll"
         onScroll={(e) => {
           const container = e.currentTarget;
           const scrollTop = container.scrollTop;
@@ -543,7 +550,7 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
           </div>
         )}
         {!loading && !error && feed.map((post, index) => (
-          <div key={`${post.id}-${post.docPath}-${index}`} className="relative w-full h-screen snap-start overflow-hidden flex-shrink-0">
+          <div key={`${post.id}-${post.docPath}-${index}`} className="relative h-[100dvh] w-full flex-shrink-0 snap-start overflow-hidden bg-black">
             {/* Vidéo HTML5 en plein écran - lecture automatique sans poster */}
             <video
               id={`video-${index}`}
@@ -604,39 +611,29 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
             )}
 
             {/* Gradient overlay pour meilleure lisibilité */}
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40 pointer-events-none" />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/80" />
 
             {/* Interactions Bar */}
-            <div className="absolute right-4 bottom-32 flex flex-col gap-4 items-center z-20">
-              {/* Mute / Unmute audio */}
-              <button
-                onClick={toggleMute}
-                className="flex flex-col items-center"
-              >
-                <div className="p-3.5 rounded-full bg-black/30 backdrop-blur-md text-white hover:text-[#19DB8A] transition-all">
-                  {isMuted ? <IconVolumeMuted size={36} /> : <IconVolume size={36} />}
-                </div>
-              </button>
-
+            <div className="absolute right-3 bottom-32 z-20 flex flex-col items-center gap-3">
               {/* Follow Button */}
               <button
                 onClick={() => handleFollowToggle(post)}
                 disabled={followingLoading.has(post.userId)}
-                className="flex flex-col items-center group"
+                className="group flex flex-col items-center"
               >
-                <div className={`p-3.5 rounded-full backdrop-blur-md transition-all ${
+                <div className={`flex h-12 w-12 items-center justify-center rounded-full border border-white/10 shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all ${
                   followingUsers.has(post.userId)
-                    ? 'bg-[#19DB8A]/20 text-[#19DB8A]'
-                    : 'bg-black/30 text-white hover:bg-[#19DB8A]/20 hover:text-[#19DB8A]'
+                    ? 'bg-[#19DB8A] text-black'
+                    : 'bg-black/45 text-white hover:bg-[#19DB8A]/20 hover:text-[#19DB8A]'
                 } ${followingLoading.has(post.userId) ? 'opacity-50' : ''}`}>
                   {followingUsers.has(post.userId) ? (
-                    <UserCheck size={36} />
+                    <UserCheck size={25} />
                   ) : (
-                    <UserPlus size={36} />
+                    <UserPlus size={25} />
                   )}
                 </div>
                 {followerCounts.has(post.userId) && (
-                  <span className="text-white text-xs font-bold mt-1.5">
+                  <span className="mt-1 text-[11px] font-extrabold text-white drop-shadow">
                     {followerCounts.get(post.userId)}
                   </span>
                 )}
@@ -645,68 +642,71 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
               <div className="flex flex-col items-center">
                 <button
                   onClick={() => openAthleteProfile(post)}
-                  className="w-14 h-14 rounded-full border-2 border-white overflow-hidden shadow-lg"
+                  className="h-12 w-12 overflow-hidden rounded-full border-2 border-white/90 bg-white/10 shadow-[0_12px_28px_rgba(0,0,0,0.4)]"
                 >
                   <img 
                     src={post.userAvatar || '/assets/images/app_launcher_icon.png'} 
                     alt={post.userName}
                     className="w-full h-full object-cover" 
+                    onError={(event) => {
+                      event.currentTarget.src = '/assets/images/app_launcher_icon.png';
+                    }}
                   />
                 </button>
-                <div className="bg-[#19DB8A] rounded-full p-0.5 -mt-2.5 relative z-10 border-2 border-black">
-                  <PlusCircle size={12} className="text-white" />
+                <div className="relative z-10 -mt-2 flex h-5 w-5 items-center justify-center rounded-full border-2 border-black bg-[#19DB8A]">
+                  <PlusCircle size={12} className="text-black" />
                 </div>
               </div>
 
               <button 
                 onClick={() => toggleLike(post)}
-                className="flex flex-col items-center group"
+                className="group flex flex-col items-center"
               >
-                <div className={`p-3.5 rounded-full bg-black/30 backdrop-blur-md transition-all ${
+                <div className={`flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/45 shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all ${
                   post.docPath && likedPosts.has(post.docPath) 
                     ? 'text-[#FF4B5C] scale-110' 
                     : 'text-white hover:text-[#FF4B5C]'
                 }`}>
-                  <IconLike size={36} />
+                  <IconLike size={25} />
                 </div>
-                <span className="text-white text-xs font-bold mt-1.5 h-5">
+                <span className="mt-1 h-4 text-[11px] font-extrabold text-white drop-shadow">
                   {typeof post.likes === 'number' ? post.likes : 0}
                 </span>
               </button>
 
               <button
-                className="flex flex-col items-center group"
+                className="group flex flex-col items-center"
                 onClick={() => openComments(post)}
               >
-                <div className="p-3.5 rounded-full bg-black/30 backdrop-blur-md text-white hover:text-[#19DB8A] transition-all">
-                  <IconComment size={36} />
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/45 text-white shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all hover:text-[#19DB8A]">
+                  <IconComment size={25} />
                 </div>
-                <span className="text-white text-xs font-bold mt-1.5">{post.comments || 0}</span>
+                <span className="mt-1 h-4 text-[11px] font-extrabold text-white drop-shadow">{post.comments || 0}</span>
               </button>
 
               <button 
                 onClick={() => handleShare(post)}
-                className="flex flex-col items-center group"
+                className="group flex flex-col items-center"
               >
-                <div className="p-3.5 rounded-full bg-black/30 backdrop-blur-md text-white hover:text-[#19DB8A] transition-all">
-                  <IconShare size={36} />
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/45 text-white shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all hover:text-[#19DB8A]">
+                  <IconShare size={25} />
                 </div>
-                <span className="text-white text-xs font-bold mt-1.5">{post.shares || 0}</span>
+                <span className="mt-1 h-4 text-[11px] font-extrabold text-white drop-shadow">{post.shares || 0}</span>
               </button>
             </div>
 
             {/* Post Info */}
-            <div className="absolute left-4 right-20 bottom-32 z-20">
+            <div className="absolute left-4 right-20 bottom-32 z-20 rounded-2xl bg-gradient-to-r from-black/45 via-black/20 to-transparent p-3 backdrop-blur-[2px]">
               <button
                 onClick={() => openAthleteProfile(post)}
-                className="text-white font-bold text-sm mb-1 flex items-center gap-2 line-clamp-1"
+                className="mb-1 flex max-w-full items-center gap-2 text-sm font-extrabold text-white drop-shadow"
               >
-                @{post.userName}
-                <span className="bg-[#208050] text-[8px] px-1.5 py-0.5 rounded-full uppercase tracking-widest flex-shrink-0">
+                <span className="truncate">@{post.userName}</span>
+                <span className="flex-shrink-0 rounded-full bg-[#19DB8A]/90 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-black">
                   {getSportFromPost(post)}
                 </span>
               </button>
-              <p className="text-white/90 text-xs leading-tight line-clamp-2 mb-2">
+              <p className="mb-2 line-clamp-2 text-xs leading-snug text-white/85 drop-shadow">
                 {post.caption}
               </p>
               {post.hashtags && post.hashtags.length > 0 && (

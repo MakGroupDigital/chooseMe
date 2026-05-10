@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit2, MapPin, Share2, Award, Activity, BrainCircuit, Trophy, MessageSquare, UserPlus, Check, AlertCircle, Users, Plus, LogOut, Settings } from 'lucide-react';
+import { Edit2, MapPin, Share2, Award, Activity, BrainCircuit, Trophy, MessageSquare, UserPlus, Check, AlertCircle, Users, Plus, LogOut, Settings, Trash2, Save, X } from 'lucide-react';
 import { UserProfile, UserType } from '../../types';
 import Button from '../../components/Button';
 import CustomVideoPlayer from '../../components/CustomVideoPlayer';
 import { getTalentInsight } from '../../services/geminiService';
 import { getFollowers, getFollowing } from '../../services/followService';
-import { listenToPerformanceVideos } from '../../services/performanceService';
+import { deletePerformanceVideo, listenToPerformanceVideos, updatePerformanceVideo } from '../../services/performanceService';
 import { shareProfile, sharePerformanceVideo } from '../../services/shareService';
 import { getFirebaseAuth } from '../../services/firebase';
 import { signOut } from 'firebase/auth';
@@ -22,6 +22,9 @@ const ProfileViewPage: React.FC<{ user: UserProfile }> = ({ user }) => {
   const [loadingStats, setLoadingStats] = useState(true);
   const [performanceVideos, setPerformanceVideos] = useState<any[]>([]);
   const [loadingVideos, setLoadingVideos] = useState(true);
+  const [editingVideo, setEditingVideo] = useState<{ id: string; title: string; caption: string } | null>(null);
+  const [videoActionLoading, setVideoActionLoading] = useState<string | null>(null);
+  const [videoActionError, setVideoActionError] = useState<string | null>(null);
 
   // Pour l'instant, on considère que la page affiche toujours le profil connecté
   const viewerType = user.type;
@@ -112,6 +115,56 @@ const ProfileViewPage: React.FC<{ user: UserProfile }> = ({ user }) => {
       navigate('/login');
     } catch (error) {
       console.error('❌ Erreur lors de la déconnexion:', error);
+    }
+  };
+
+  const handleStartEditVideo = (video: any) => {
+    if (!video.id) return;
+    setVideoActionError(null);
+    setEditingVideo({
+      id: video.id,
+      title: video.title || '',
+      caption: video.caption || ''
+    });
+  };
+
+  const handleSaveVideo = async () => {
+    if (!editingVideo) return;
+    setVideoActionLoading(editingVideo.id);
+    setVideoActionError(null);
+
+    try {
+      await updatePerformanceVideo(user.uid, editingVideo.id, {
+        title: editingVideo.title,
+        caption: editingVideo.caption
+      });
+      setEditingVideo(null);
+    } catch (error) {
+      console.error(error);
+      setVideoActionError('Impossible de modifier la vidéo pour le moment.');
+    } finally {
+      setVideoActionLoading(null);
+    }
+  };
+
+  const handleDeleteVideo = async (video: any) => {
+    if (!video.id) return;
+    const confirmed = window.confirm('Supprimer définitivement cette vidéo ?');
+    if (!confirmed) return;
+
+    setVideoActionLoading(video.id);
+    setVideoActionError(null);
+
+    try {
+      await deletePerformanceVideo(user.uid, video.id);
+      if (editingVideo?.id === video.id) {
+        setEditingVideo(null);
+      }
+    } catch (error) {
+      console.error(error);
+      setVideoActionError('Impossible de supprimer la vidéo pour le moment.');
+    } finally {
+      setVideoActionLoading(null);
     }
   };
 
@@ -356,6 +409,12 @@ const ProfileViewPage: React.FC<{ user: UserProfile }> = ({ user }) => {
             )}
           </div>
 
+          {videoActionError && (
+            <div className="rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {videoActionError}
+            </div>
+          )}
+
           {loadingVideos ? (
             <div className="bg-[#0A0A0A] border border-white/5 rounded-3xl p-12 flex flex-col items-center justify-center">
               {/* Logo Choose Me en chargement - rogné en cercle */}
@@ -383,33 +442,91 @@ const ProfileViewPage: React.FC<{ user: UserProfile }> = ({ user }) => {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
-              {performanceVideos.map((video, idx) => (
-                <div key={idx} className="aspect-[4/5] bg-[#0A0A0A] rounded-3xl border border-white/5 overflow-hidden shadow-lg">
-                  <CustomVideoPlayer
-                    src={video.videoUrl}
-                    poster={video.thumbnailUrl}
-                    caption={video.caption}
-                    isHD={video.processed}
-                    videoId={video.id}
-                    userId={video.userId}
-                    title={video.caption || `Vidéo de ${user.displayName}`}
-                    description={`Performance de ${user.displayName} - ${user.sport || 'Sport'} ${user.position ? `(${user.position})` : ''}`}
-                    hashtags={[
-                      'ChooseMe',
-                      user.sport?.replace(/\s+/g, '') || 'Sport',
-                      user.country?.replace(/\s+/g, '') || '',
-                      'Performance',
-                      'Talent'
-                    ].filter(Boolean)}
-                    onShare={async () => {
-                      if (video.id && video.userId) {
-                        const { incrementVideoShares } = await import('../../services/performanceService');
-                        await incrementVideoShares(video.userId, video.id);
-                      }
-                    }}
-                    className="w-full h-full"
-                  />
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              {performanceVideos.map((video) => (
+                <div key={video.id || video.videoUrl} className="overflow-hidden rounded-2xl border border-white/5 bg-[#0A0A0A] shadow-lg">
+                  <div className="relative aspect-square overflow-hidden">
+                    <CustomVideoPlayer
+                      src={video.videoUrl}
+                      poster={video.thumbnailUrl}
+                      caption={video.caption}
+                      isHD={video.processed}
+                      videoId={video.id}
+                      userId={video.userId}
+                      title={video.title || video.caption || `Vidéo de ${user.displayName}`}
+                      description={`Performance de ${user.displayName} - ${user.sport || 'Sport'} ${user.position ? `(${user.position})` : ''}`}
+                      hashtags={[
+                        'ChooseMe',
+                        user.sport?.replace(/\s+/g, '') || 'Sport',
+                        user.country?.replace(/\s+/g, '') || '',
+                        'Performance',
+                        'Talent'
+                      ].filter(Boolean)}
+                      onShare={async () => {
+                        if (video.id && video.userId) {
+                          const { incrementVideoShares } = await import('../../services/performanceService');
+                          await incrementVideoShares(video.userId, video.id);
+                        }
+                      }}
+                      className="h-full w-full"
+                      compact
+                    />
+
+                    {isOwnProfile && (
+                      <div className="absolute right-1.5 top-1.5 z-40 flex gap-1">
+                        <button
+                          onClick={() => handleStartEditVideo(video)}
+                          disabled={videoActionLoading === video.id}
+                          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/70 text-white backdrop-blur-md transition-colors hover:text-[#19DB8A]"
+                          aria-label="Modifier la vidéo"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteVideo(video)}
+                          disabled={videoActionLoading === video.id}
+                          className="flex h-7 w-7 items-center justify-center rounded-full border border-red-400/30 bg-black/70 text-red-300 backdrop-blur-md transition-colors hover:bg-red-500/20"
+                          aria-label="Supprimer la vidéo"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {editingVideo?.id === video.id && (
+                    <div className="space-y-2 border-t border-white/5 p-2">
+                      <input
+                        value={editingVideo.title}
+                        onChange={(event) => setEditingVideo((prev) => prev ? { ...prev, title: event.target.value } : prev)}
+                        placeholder="Titre de la vidéo"
+                        className="w-full rounded-xl border border-white/10 bg-black/35 px-2 py-1.5 text-xs text-white placeholder-white/35 outline-none focus:border-[#19DB8A]"
+                      />
+                      <textarea
+                        value={editingVideo.caption}
+                        onChange={(event) => setEditingVideo((prev) => prev ? { ...prev, caption: event.target.value } : prev)}
+                        placeholder="Description"
+                        rows={3}
+                        className="w-full resize-none rounded-xl border border-white/10 bg-black/35 px-2 py-1.5 text-xs text-white placeholder-white/35 outline-none focus:border-[#19DB8A]"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleSaveVideo}
+                          disabled={videoActionLoading === video.id}
+                          className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-[#19DB8A] px-2 py-1.5 text-xs font-bold text-black disabled:opacity-60"
+                        >
+                          <Save size={13} />
+                          Enregistrer
+                        </button>
+                        <button
+                          onClick={() => setEditingVideo(null)}
+                          className="flex items-center justify-center rounded-xl border border-white/10 px-2 py-1.5 text-xs font-bold text-white/70"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

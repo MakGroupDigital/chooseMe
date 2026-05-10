@@ -16,6 +16,7 @@ interface CustomVideoPlayerProps {
   hashtags?: string[];
   onShare?: () => void;
   initialLikeCount?: number;
+  compact?: boolean;
 }
 
 const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ 
@@ -30,7 +31,8 @@ const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
   description,
   hashtags = [],
   onShare,
-  initialLikeCount = 0
+  initialLikeCount = 0,
+  compact = false
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -368,14 +370,14 @@ const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 pointer-events-none" />
 
       {/* Badge HD */}
-      {isHD && (
+      {isHD && !compact && (
         <div className="absolute top-3 right-3 px-2 py-1 bg-[#19DB8A]/90 backdrop-blur-sm rounded-md">
           <span className="text-black text-[10px] font-bold">HD</span>
         </div>
       )}
 
       {/* Logo Watermark - Coin bas gauche */}
-      <div className="absolute bottom-20 left-3 w-12 h-12 rounded-full overflow-hidden bg-white/10 backdrop-blur-sm border-2 border-white/20 shadow-lg pointer-events-none">
+      {!compact && <div className="absolute bottom-20 left-3 w-12 h-12 rounded-full overflow-hidden bg-white/10 backdrop-blur-sm border-2 border-white/20 shadow-lg pointer-events-none">
         <img 
           src="/assets/images/app_launcher_icon.png" 
           alt="Choose Me" 
@@ -385,22 +387,22 @@ const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
             (e.target as HTMLImageElement).style.display = 'none';
           }}
         />
-      </div>
+      </div>}
 
       {/* Bouton Play/Pause Central */}
       {!isPlaying && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <button
             onClick={togglePlay}
-            className="w-16 h-16 rounded-full bg-[#19DB8A]/90 backdrop-blur-md flex items-center justify-center shadow-lg shadow-[#19DB8A]/30 pointer-events-auto hover:scale-110 transition-transform"
+            className={`${compact ? 'w-10 h-10' : 'w-16 h-16'} rounded-full bg-[#19DB8A]/90 backdrop-blur-md flex items-center justify-center shadow-lg shadow-[#19DB8A]/30 pointer-events-auto hover:scale-110 transition-transform`}
           >
-            <Play size={28} className="text-black ml-1" fill="currentColor" />
+            <Play size={compact ? 18 : 28} className="text-black ml-1" fill="currentColor" />
           </button>
         </div>
       )}
 
       {/* Contrôles */}
-      <div 
+      {!compact && <div 
         className={`absolute bottom-0 left-0 right-0 transition-opacity duration-300 ${
           showControls || !isPlaying ? 'opacity-100' : 'opacity-0'
         }`}
@@ -525,12 +527,12 @@ const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Légende */}
       {caption && (
-        <div className="absolute bottom-16 left-0 right-0 px-4 pointer-events-none">
-          <p className="text-white text-sm drop-shadow-lg line-clamp-2">
+        <div className={`${compact ? 'bottom-2 px-2' : 'bottom-16 px-4'} absolute left-0 right-0 pointer-events-none`}>
+          <p className={`${compact ? 'text-[10px] line-clamp-1' : 'text-sm line-clamp-2'} text-white drop-shadow-lg`}>
             {caption}
           </p>
         </div>

@@ -5,6 +5,7 @@ import {
   Check,
   Loader2,
   Upload,
+  Play,
   Volume2,
   VolumeX
 } from 'lucide-react';
@@ -18,6 +19,7 @@ import RightSidebar from '../../components/RightSidebar';
 const PerformanceRecordingPage: React.FC<{ userType: UserType }> = ({ userType }) => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -33,6 +35,7 @@ const PerformanceRecordingPage: React.FC<{ userType: UserType }> = ({ userType }
   const [showCaptionInput, setShowCaptionInput] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [previewPlaying, setPreviewPlaying] = useState(true);
   const [brightness, setBrightness] = useState(100);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -66,6 +69,37 @@ const PerformanceRecordingPage: React.FC<{ userType: UserType }> = ({ userType }
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!recordedUrl) {
+      setPreviewPlaying(true);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const video = previewVideoRef.current;
+      if (!video) return;
+
+      video.currentTime = 0;
+      video.muted = true;
+      video.load();
+      video.play()
+        .then(() => setPreviewPlaying(true))
+        .catch(() => setPreviewPlaying(false));
+    }, 150);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [recordedUrl]);
+
+  const playRecordedPreview = () => {
+    const video = previewVideoRef.current;
+    if (!video) return;
+
+    video.muted = true;
+    video.play()
+      .then(() => setPreviewPlaying(true))
+      .catch(() => setPreviewPlaying(false));
+  };
 
   const startCamera = async () => {
     try {
@@ -144,8 +178,17 @@ const PerformanceRecordingPage: React.FC<{ userType: UserType }> = ({ userType }
       canvasStream.addTrack(track);
     });
 
-    const recorder = new MediaRecorder(canvasStream, {
-      mimeType: 'video/webm;codecs=vp9',
+    const supportedMimeType = [
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+      'video/mp4'
+    ].find((type) => MediaRecorder.isTypeSupported(type));
+
+    const recorder = new MediaRecorder(canvasStream, supportedMimeType ? {
+      mimeType: supportedMimeType,
+      videoBitsPerSecond: 8000000
+    } : {
       videoBitsPerSecond: 8000000
     });
 
@@ -156,7 +199,7 @@ const PerformanceRecordingPage: React.FC<{ userType: UserType }> = ({ userType }
     };
 
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || supportedMimeType || 'video/webm' });
       const url = URL.createObjectURL(blob);
       setRecordedBlob(blob);
       setRecordedUrl(url);
@@ -182,6 +225,10 @@ const PerformanceRecordingPage: React.FC<{ userType: UserType }> = ({ userType }
       const video = videoRef.current;
       const videoWidth = video.videoWidth;
       const videoHeight = video.videoHeight;
+      if (!videoWidth || !videoHeight) {
+        animationFrameRef.current = requestAnimationFrame(drawFrame);
+        return;
+      }
       const canvasWidth = canvas.width;
       const canvasHeight = canvas.height;
 
@@ -333,14 +380,30 @@ const PerformanceRecordingPage: React.FC<{ userType: UserType }> = ({ userType }
       {/* Vidéo principale - plein écran */}
       <div className="absolute inset-0 w-full h-full bg-black flex items-center justify-center">
         {recordedUrl ? (
-          <video
-            src={recordedUrl}
-            className="w-full h-full object-cover"
-            autoPlay
-            loop
-            muted
-            playsInline
-          />
+          <>
+            <video
+              ref={previewVideoRef}
+              src={recordedUrl}
+              className="w-full h-full object-cover"
+              autoPlay
+              loop
+              muted
+              playsInline
+              controls
+              onPlay={() => setPreviewPlaying(true)}
+              onPause={() => setPreviewPlaying(false)}
+            />
+            {!previewPlaying && (
+              <button
+                type="button"
+                onClick={playRecordedPreview}
+                className="absolute left-1/2 top-1/2 z-30 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-black shadow-2xl"
+                aria-label="Lire la vidéo enregistrée"
+              >
+                <Play size={28} fill="currentColor" />
+              </button>
+            )}
+          </>
         ) : (
           <video
             ref={videoRef}

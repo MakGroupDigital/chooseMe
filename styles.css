@@ -98,3 +98,62 @@ body {
 .animate-slide-up {
   animation: slideUp 0.4s ease-out forwards;
 }
+
+.field {
+  width: 100%;
+  min-height: 2.75rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 0 1rem;
+  color: #ffffff;
+  font-size: 0.875rem;
+}
+
+.field::placeholder {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.field:focus {
+  border-color: rgba(25, 219, 138, 0.75);
+  box-shadow: 0 0 0 3px rgba(25, 219, 138, 0.12);
+}
+
+.mini {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0 0.75rem;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.75rem;
+  font-weight: 800;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.mini:hover {
+  border-color: rgba(25, 219, 138, 0.45);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.mini.green {
+  border-color: rgba(25, 219, 138, 0.28);
+  background: rgba(25, 219, 138, 0.15);
+  color: #19db8a;
+}
+
+.mini.warn {
+  border-color: rgba(255, 138, 60, 0.3);
+  background: rgba(255, 138, 60, 0.12);
+  color: #ffb178;
+}
+
+.mini.danger {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}

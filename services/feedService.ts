@@ -108,10 +108,6 @@ const getThumbnailUrl = (data: Record<string, any>, fallback = ''): string => {
  * Récupère les infos utilisateur avec cache
  */
 async function getUserInfo(userId: string, db: any): Promise<{ displayName: string; avatarUrl: string }> {
-  if (userCache.has(userId)) {
-    return userCache.get(userId)!;
-  }
-
   try {
     const userDoc = await getDoc(doc(db, 'users', userId));
     if (userDoc.exists()) {
@@ -130,6 +126,7 @@ async function getUserInfo(userId: string, db: any): Promise<{ displayName: stri
           userData.avatarUrl ||
           userData.photoUrl ||
           userData.photo_url ||
+          userData.avatar_url ||
           userData.post_photo ||
           userData.photo ||
           ''
@@ -317,9 +314,10 @@ export async function fetchVideoFeed(options?: {
       const userIndex = userIds.indexOf(video.userId);
       if (userIndex !== -1 && userInfoResults[userIndex]) {
         const userInfo = userInfoResults[userIndex];
-        // Conserver d'abord les infos du document vidéo, puis compléter depuis users/{id}.
+        // L'avatar du profil doit être la source de vérité: les documents vidéo
+        // peuvent garder une ancienne copie Firebase Storage.
         video.userName = video.userName || userInfo.displayName || 'Talent';
-        video.userAvatar = video.userAvatar || userInfo.avatarUrl || '/assets/images/app_launcher_icon.png';
+        video.userAvatar = userInfo.avatarUrl || video.userAvatar || '/assets/images/app_launcher_icon.png';
       } else {
         video.userName = video.userName || 'Talent';
         video.userAvatar = video.userAvatar || '/assets/images/app_launcher_icon.png';

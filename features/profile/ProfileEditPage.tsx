@@ -152,6 +152,7 @@ const ProfileEditPage: React.FC<{ user: UserProfile }> = ({ user }) => {
         displayName: name.trim(),
         country: country || null,
         city: city || null,
+        avatarUrl: finalAvatarUrl || null,
         photoUrl: finalAvatarUrl || null,
       };
 

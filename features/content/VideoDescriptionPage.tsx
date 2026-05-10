@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { X, Check, Loader2, Sparkles } from 'lucide-react';
 import { UserType } from '../../types';
@@ -15,18 +15,26 @@ const VideoDescriptionPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as LocationState;
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState('');
 
   const isAthlete = state?.userType === UserType.ATHLETE;
 
-  // Rediriger si pas de vidéo
-  if (!state?.videoBlob) {
-    navigate('/create-content');
-    return null;
-  }
+  useEffect(() => {
+    if (!state?.videoBlob) {
+      navigate('/create-content', { replace: true });
+      return;
+    }
+
+    const url = URL.createObjectURL(state.videoBlob);
+    setPreviewUrl(url);
+
+    return () => URL.revokeObjectURL(url);
+  }, [navigate, state?.videoBlob]);
 
   const handlePublish = async () => {
     if (!title.trim() || !description.trim()) {
@@ -96,6 +104,28 @@ const VideoDescriptionPage: React.FC = () => {
 
       {/* Contenu principal */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Prévisualisation vidéo */}
+        <div className="overflow-hidden rounded-3xl border border-white/15 bg-white/[0.04]">
+          <div className="relative aspect-[9/16] max-h-[58vh] w-full bg-black">
+            {previewUrl ? (
+              <video
+                ref={previewVideoRef}
+                src={previewUrl}
+                className="h-full w-full object-contain"
+                controls
+                autoPlay
+                muted
+                playsInline
+                preload="auto"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-white/45">
+                Préparation de la vidéo...
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Titre */}
         <div>
           <label className="text-white text-sm font-semibold mb-3 block">
