@@ -5,7 +5,7 @@ import { User, Shield, Briefcase, Camera, Globe } from 'lucide-react';
 import Button from '../../components/Button';
 import { UserType } from '../../types';
 import { getFirebaseAuth, getFirestoreDb } from '../../services/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 
 const TYPES = [
   { id: UserType.ATHLETE, label: 'Athlète / Talent', icon: <User size={28} />, desc: 'Je veux me faire recruter' },
@@ -29,15 +29,21 @@ const OnboardingChooseTypePage: React.FC<{ onSelect: (type: UserType) => void }>
       const user = auth.currentUser;
 
       if (user) {
-        await updateDoc(doc(db, 'users', user.uid), {
+        await setDoc(doc(db, 'users', user.uid), {
           type: selected,
+          needsProfileType: false,
           statut: selected === UserType.VISITOR ? 'ok' : 'no',
-          etat: selected === UserType.VISITOR ? 'ac' : 'nv'
-        });
+          etat: selected === UserType.VISITOR ? 'ac' : 'nv',
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        onSelect(selected);
+        navigate('/home');
+        return;
       }
 
       onSelect(selected);
-      navigate('/home');
+      navigate('/onboarding/register');
     } catch (err) {
       console.error('Erreur lors de la mise à jour du profil:', err);
     }

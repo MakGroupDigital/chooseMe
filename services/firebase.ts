@@ -1,5 +1,5 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth, onAuthStateChanged, type User } from 'firebase/auth';
+import { browserLocalPersistence, getAuth, setPersistence, type Auth, onAuthStateChanged, type User } from 'firebase/auth';
 import { getFirestore, type Firestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { useState, useEffect } from 'react';
 
@@ -27,6 +27,9 @@ export function getFirebaseApp(): FirebaseApp {
 export function getFirebaseAuth(): Auth {
   if (!authInstance) {
     authInstance = getAuth(getFirebaseApp());
+    void setPersistence(authInstance, browserLocalPersistence).catch((error) => {
+      console.warn('Firebase auth persistence unavailable:', error);
+    });
   }
   return authInstance;
 }
@@ -61,5 +64,4 @@ export function useAuth() {
 // Exports pour compatibilité
 export const auth = getFirebaseAuth();
 export const db = getFirestoreDb();
-
 

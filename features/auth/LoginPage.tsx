@@ -1,10 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '../../components/Button';
 import { Mail, Lock, LogIn, ChevronLeft } from 'lucide-react';
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { getFirebaseAuth } from '../../services/firebase';
+import { startGoogleAuth } from '../../services/googleAuthService';
 
 const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
@@ -12,6 +13,13 @@ const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const googleError = sessionStorage.getItem('chooseMe.googleAuthError');
+    if (!googleError) return;
+    sessionStorage.removeItem('chooseMe.googleAuthError');
+    setError(googleError);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,63 +41,29 @@ const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async (mode: 'login' | 'signup' = 'login') => {
     setLoading(true);
     setError(null);
     try {
-      console.log('🔵 Début connexion Google...');
-      const auth = getFirebaseAuth();
-      console.log('✅ Auth instance récupérée');
-      const provider = new GoogleAuthProvider();
-      console.log('✅ Provider Google créé');
-      console.log('🔵 Ouverture popup Google...');
-      const result = await signInWithPopup(auth, provider);
-      console.log('✅ Popup fermée, résultat:', result.user.email);
-      
-      // Créer ou mettre à jour le document utilisateur dans Firestore
-      const { getFirestoreDb } = await import('../../services/firebase');
-      const { doc, getDoc, setDoc } = await import('firebase/firestore');
-      const db = getFirestoreDb();
-      const userRef = doc(db, 'users', result.user.uid);
-      
-      // Vérifier si le document existe déjà
-      const userSnap = await getDoc(userRef);
-      
-      if (!userSnap.exists()) {
-        // Créer le document pour un nouvel utilisateur
-        console.log('🆕 Première connexion - Création du document utilisateur pour:', result.user.email);
-        await setDoc(userRef, {
-          email: result.user.email,
-          displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Utilisateur',
-          photoUrl: result.user.photoURL,
-          type: 'visitor', // Type temporaire
-          statut: 'no',
-          etat: 'nv',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
-        console.log('✅ Document créé - Redirection vers choix du profil');
-        onLogin();
-        // Rediriger vers le choix du type de profil pour les nouveaux utilisateurs
-        navigate('/onboarding/type');
-      } else {
-        console.log('✅ Utilisateur existant - Connexion directe');
-        onLogin();
-        // Rediriger vers l'accueil pour les utilisateurs existants
-        navigate('/home');
-      }
+      await startGoogleAuth(mode);
+      onLogin();
+      navigate('/home');
     } catch (err: any) {
       console.error('❌ Erreur connexion Google:', err);
       console.error('Code erreur:', err.code);
       console.error('Message:', err.message);
       
       let errorMessage = 'Impossible de vous connecter avec Google.';
-      if (err.code === 'auth/popup-blocked') {
-        errorMessage = 'La popup a été bloquée. Autorisez les popups pour ce site.';
-      } else if (err.code === 'auth/popup-closed-by-user') {
-        errorMessage = 'Connexion annulée.';
-      } else if (err.code === 'auth/unauthorized-domain') {
+      if (err.code === 'auth/unauthorized-domain') {
         errorMessage = 'Domaine non autorisé. Contactez l\'administrateur.';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        errorMessage = 'Google Auth n’est pas activé dans Firebase.';
+      } else if (err.code === 'auth/popup-blocked') {
+        errorMessage = 'La fenêtre Google a été bloquée. Autorisez les popups pour ce site.';
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Connexion Google annulée.';
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        errorMessage = 'Une fenêtre Google est déjà ouverte.';
       }
       
       setError(errorMessage);
@@ -177,7 +151,7 @@ const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
             type="button" 
             variant="ghost" 
             disabled={loading} 
-            onClick={handleGoogleLogin}
+            onClick={() => handleGoogleLogin('login')}
             className="w-full py-4 text-lg border border-white/10"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
@@ -192,7 +166,7 @@ const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
         <div className="mt-8 text-center text-white/40 text-sm">
           Pas encore membre ?{' '}
-          <button onClick={() => navigate('/onboarding/type')} className="text-[#19DB8A] font-bold hover:underline">
+          <button onClick={() => handleGoogleLogin('signup')} disabled={loading} className="text-[#19DB8A] font-bold hover:underline disabled:opacity-50">
             S'inscrire gratuitement
           </button>
         </div>

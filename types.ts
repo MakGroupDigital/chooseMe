@@ -12,6 +12,7 @@ export interface UserProfile {
   email: string;
   displayName: string;
   type: UserType;
+  needsProfileType?: boolean;
   country: string;
   city?: string;
   avatarUrl?: string;

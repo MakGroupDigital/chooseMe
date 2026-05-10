@@ -5,9 +5,10 @@ import { Mail, Lock, User, Phone, Globe, ChevronLeft, Search } from 'lucide-reac
 import Button from '../../components/Button';
 import { UserType } from '../../types';
 import { getFirebaseAuth, getFirestoreDb } from '../../services/firebase';
-import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { getPhoneCountries, Country } from '../../utils/phoneCountries';
+import { startGoogleAuth } from '../../services/googleAuthService';
 
 interface Props {
   selectedType?: UserType | null;
@@ -50,12 +51,14 @@ const OnboardingCreateAccountPage: React.FC<Props> = ({ selectedType }) => {
       displayName: displayName.trim(),
       phoneNumber: formData.phone.trim(),
       pays: formData.country,
-      type: UserType.VISITOR, // Type temporaire, sera défini après choix du profil
-      statut: 'no',
-      etat: 'nv',
-      photoUrl: photoUrl,
+      ...(selectedType ? { type: selectedType } : {}),
+      needsProfileType: !selectedType,
+      statut: selectedType === UserType.VISITOR ? 'ok' : 'no',
+      etat: selectedType === UserType.VISITOR ? 'ac' : 'nv',
+      avatarUrl: photoUrl || '',
+      photoUrl: photoUrl || '',
       createdAt: serverTimestamp()
-    });
+    }, { merge: true });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,8 +86,7 @@ const OnboardingCreateAccountPage: React.FC<Props> = ({ selectedType }) => {
       const uid = cred.user.uid;
       await createUserProfile(uid, formData.email, formData.name);
       
-      // Rediriger vers le choix du profil
-      navigate('/onboarding/type');
+      navigate(selectedType ? '/home' : '/onboarding/type');
     } catch (err: any) {
       const message =
         err?.code === 'auth/email-already-in-use'
@@ -100,35 +102,21 @@ const OnboardingCreateAccountPage: React.FC<Props> = ({ selectedType }) => {
     setError(null);
     setLoading(true);
     try {
-      const auth = getFirebaseAuth();
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      
-      const uid = result.user.uid;
-      const email = result.user.email || '';
-      const displayName = result.user.displayName || email.split('@')[0];
-      const photoUrl = result.user.photoURL || undefined;
-
-      // Vérifier si l'utilisateur existe déjà
-      const db = getFirestoreDb();
-      const { doc, getDoc } = await import('firebase/firestore');
-      const userRef = doc(db, 'users', uid);
-      const userSnap = await getDoc(userRef);
-
-      if (!userSnap.exists()) {
-        // Créer le profil utilisateur pour un nouvel utilisateur
-        console.log('🆕 Première inscription Google - Création du profil');
-        await createUserProfile(uid, email, displayName, photoUrl);
-        // Rediriger vers le choix du profil
-        navigate('/onboarding/type');
-      } else {
-        // Utilisateur existant qui essaie de s'inscrire à nouveau
-        console.log('✅ Utilisateur existant - Redirection vers accueil');
-        navigate('/home');
-      }
+      await startGoogleAuth('signup');
+      navigate('/home');
     } catch (err: any) {
       console.error('❌ Erreur inscription Google:', err);
-      setError('Impossible de créer un compte avec Google.');
+      const message =
+        err?.code === 'auth/unauthorized-domain'
+          ? 'Domaine non autorisé. Contactez l’administrateur.'
+          : err?.code === 'auth/operation-not-allowed'
+            ? 'Google Auth n’est pas activé dans Firebase.'
+            : err?.code === 'auth/popup-blocked'
+              ? 'La fenêtre Google a été bloquée. Autorisez les popups pour ce site.'
+              : err?.code === 'auth/popup-closed-by-user'
+                ? 'Inscription Google annulée.'
+                : 'Impossible de créer un compte avec Google.';
+      setError(message);
     } finally {
       setLoading(false);
     }

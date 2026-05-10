@@ -35,8 +35,8 @@ import PwaInstallBanner from './components/PwaInstallBanner';
 import { UserType, UserProfile } from './types';
 import { MOCK_USER } from './constants';
 import { getFirebaseAuth, getFirestoreDb } from './services/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged, type Unsubscribe, type User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { usePermissions } from './hooks/usePermissions';
 import { applyLanguage, applyTheme, loadAppSettings, SETTINGS_EVENT } from './services/appSettingsService';
 import { ensureBrowserNotificationPermission, listenUserNotifications, notifyBrowser } from './services/notificationService';
@@ -86,7 +86,12 @@ const App: React.FC = () => {
     const auth = getFirebaseAuth();
     const db = getFirestoreDb();
 
-    const unsub = onAuthStateChanged(auth, (fbUser) => {
+    let profileUnsub: Unsubscribe | null = null;
+
+    const handleFirebaseUser = (fbUser: FirebaseUser | null) => {
+      profileUnsub?.();
+      profileUnsub = null;
+
       if (!fbUser) {
         setUser(null);
         setLoading(false);
@@ -97,11 +102,19 @@ const App: React.FC = () => {
         const usersDocRef = doc(db, 'users', fbUser.uid);
         const userDocRef = doc(db, 'user', fbUser.uid);
 
+        const hasChosenType = (data: any | undefined) => {
+          const validType = !!data?.type && Object.values(UserType).includes(data.type as UserType);
+          if (!validType || data?.needsProfileType === true) return false;
+          const legacyTemporaryVisitor = data.type === UserType.VISITOR && (data?.statut === 'no' || data?.etat === 'nv');
+          return !legacyTemporaryVisitor;
+        };
+
         const mapProfile = (data: any | undefined): UserProfile => ({
           uid: fbUser.uid,
           email: fbUser.email || data?.email || '',
           displayName: data?.displayName || data?.display_name || fbUser.displayName || fbUser.email || '',
           type: (data?.type as UserType) || UserType.VISITOR,
+          needsProfileType: !hasChosenType(data),
           country: data?.country || data?.pays || '',
           city: data?.city || data?.ville || '',
           avatarUrl: data?.avatarUrl || data?.photoUrl || data?.photo_url || data?.avatar_url || fbUser.photoURL || undefined,
@@ -116,11 +129,35 @@ const App: React.FC = () => {
           }
         });
 
-        const unsubscribeSnapshot = onSnapshot(usersDocRef, async (snap) => {
+        profileUnsub = onSnapshot(usersDocRef, async (snap) => {
           let data = snap.data() as any | undefined;
           if (!data) {
             const legacySnap = await getDoc(userDocRef);
             data = legacySnap.data() as any | undefined;
+          }
+
+          if (!data) {
+            const displayName = fbUser.displayName || fbUser.email?.split('@')[0] || 'Utilisateur';
+            await setDoc(usersDocRef, {
+              email: fbUser.email || '',
+              displayName,
+              avatarUrl: fbUser.photoURL || '',
+              photoUrl: fbUser.photoURL || '',
+              authProvider: fbUser.providerData[0]?.providerId || 'firebase',
+              needsProfileType: true,
+              statut: 'no',
+              etat: 'nv',
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            }, { merge: true });
+
+            data = {
+              email: fbUser.email || '',
+              displayName,
+              avatarUrl: fbUser.photoURL || '',
+              photoUrl: fbUser.photoURL || '',
+              needsProfileType: true
+            };
           }
           
           console.log('🔍 Données Firebase brutes:', data);
@@ -137,18 +174,20 @@ const App: React.FC = () => {
           setLoading(false);
         });
 
-        return () => unsubscribeSnapshot();
       } catch (e) {
         console.error('❌ Erreur chargement profil utilisateur:', e);
         setUser(null);
         setLoading(false);
       }
-    });
+    };
+
+    const authUnsub = onAuthStateChanged(auth, handleFirebaseUser);
 
     return () => {
       window.removeEventListener(SETTINGS_EVENT, handleSettingsChanged as EventListener);
       window.removeEventListener('storage', handleStorage);
-      unsub();
+      authUnsub();
+      profileUnsub?.();
     };
   }, []);
 
@@ -202,12 +241,12 @@ const App: React.FC = () => {
       )}
       <Routes>
         <Route path="/" element={user ? <Navigate to="/home" replace /> : <Navigate to="/onboarding" replace />} />
-        <Route path="/onboarding" element={user ? <Navigate to="/home" replace /> : <ModernOnboardingPage />} />
+        <Route path="/onboarding" element={user ? <Navigate to={user.needsProfileType ? '/onboarding/type' : '/home'} replace /> : <ModernOnboardingPage />} />
         <Route path="/onboarding/register" element={<OnboardingCreateAccountPage selectedType={selectedOnboardingType} />} />
         <Route path="/onboarding/type" element={<OnboardingChooseTypePage onSelect={handleSelectType} />} />
-        <Route path="/login" element={user ? <Navigate to="/home" replace /> : <LoginPage onLogin={handleLogin} />} />
+        <Route path="/login" element={user ? <Navigate to={user.needsProfileType ? '/onboarding/type' : '/home'} replace /> : <LoginPage onLogin={handleLogin} />} />
         
-        <Route path="/home" element={<DashboardRouter userType={user?.type || UserType.ATHLETE} />} />
+        <Route path="/home" element={user?.needsProfileType ? <Navigate to="/onboarding/type" replace /> : <DashboardRouter userType={user?.type || UserType.ATHLETE} />} />
         <Route path="/dashboard/athlete" element={<AthleteDashboard />} />
         <Route path="/dashboard/recruiter" element={<RecruiterDashboard />} />
         <Route path="/dashboard/club" element={<ClubDashboard />} />
