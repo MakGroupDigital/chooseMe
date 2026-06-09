@@ -4,9 +4,9 @@ import { COLORS } from '../constants';
 type IconProps = {
   size?: number;
   className?: string;
+  filled?: boolean;
 };
 
-const stroke = COLORS.WHITE;
 const primary = COLORS.SECONDARY_GREEN;
 const accent = COLORS.ACCENT_ORANGE;
 
@@ -17,7 +17,7 @@ export const IconFeed: React.FC<IconProps> = ({ size = 22, className }) => (
     viewBox="0 0 24 24"
     className={className}
     fill="none"
-    stroke={stroke}
+    stroke="currentColor"
     strokeWidth="1.7"
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -37,7 +37,7 @@ export const IconNews: React.FC<IconProps> = ({ size = 22, className }) => (
     viewBox="0 0 24 24"
     className={className}
     fill="none"
-    stroke={stroke}
+    stroke="currentColor"
     strokeWidth="1.7"
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -57,7 +57,7 @@ export const IconPerf: React.FC<IconProps> = ({ size = 26, className }) => (
     viewBox="0 0 24 24"
     className={className}
     fill="none"
-    stroke={stroke}
+    stroke="currentColor"
     strokeWidth="1.7"
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -76,7 +76,7 @@ export const IconLive: React.FC<IconProps> = ({ size = 22, className }) => (
     viewBox="0 0 24 24"
     className={className}
     fill="none"
-    stroke={stroke}
+    stroke="currentColor"
     strokeWidth="1.7"
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -95,7 +95,7 @@ export const IconProfile: React.FC<IconProps> = ({ size = 22, className }) => (
     viewBox="0 0 24 24"
     className={className}
     fill="none"
-    stroke={stroke}
+    stroke="currentColor"
     strokeWidth="1.7"
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -106,14 +106,14 @@ export const IconProfile: React.FC<IconProps> = ({ size = 22, className }) => (
   </svg>
 );
 
-export const IconLike: React.FC<IconProps> = ({ size = 26, className }) => (
+export const IconLike: React.FC<IconProps> = ({ size = 26, className, filled = false }) => (
   <svg
     width={size}
     height={size}
     viewBox="0 0 24 24"
     className={className}
-    fill="none"
-    stroke={stroke}
+    fill={filled ? 'currentColor' : 'none'}
+    stroke="currentColor"
     strokeWidth="1.8"
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -129,7 +129,7 @@ export const IconComment: React.FC<IconProps> = ({ size = 26, className }) => (
     viewBox="0 0 24 24"
     className={className}
     fill="none"
-    stroke={stroke}
+    stroke="currentColor"
     strokeWidth="1.7"
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -147,7 +147,7 @@ export const IconShare: React.FC<IconProps> = ({ size = 26, className }) => (
     viewBox="0 0 24 24"
     className={className}
     fill="none"
-    stroke={stroke}
+    stroke="currentColor"
     strokeWidth="1.7"
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -165,7 +165,7 @@ export const IconVolume: React.FC<IconProps> = ({ size = 22, className }) => (
     viewBox="0 0 24 24"
     className={className}
     fill="none"
-    stroke={stroke}
+    stroke="currentColor"
     strokeWidth="1.7"
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -183,7 +183,7 @@ export const IconVolumeMuted: React.FC<IconProps> = ({ size = 22, className }) =
     viewBox="0 0 24 24"
     className={className}
     fill="none"
-    stroke={stroke}
+    stroke="currentColor"
     strokeWidth="1.7"
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -201,7 +201,7 @@ export const IconWallet: React.FC<IconProps> = ({ size = 22, className }) => (
     viewBox="0 0 24 24"
     className={className}
     fill="none"
-    stroke={stroke}
+    stroke="currentColor"
     strokeWidth="1.7"
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -220,7 +220,7 @@ export const IconMessage: React.FC<IconProps> = ({ size = 22, className }) => (
     viewBox="0 0 24 24"
     className={className}
     fill="none"
-    stroke={stroke}
+    stroke="currentColor"
     strokeWidth="1.7"
     strokeLinecap="round"
     strokeLinejoin="round"

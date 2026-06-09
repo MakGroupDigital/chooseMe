@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Heart } from 'lucide-react';
+import { normalizeEngagementCount } from '../utils/engagement';
 import '../styles/likeButton.css';
 
 interface LikeButtonProps {
@@ -25,6 +26,7 @@ const LikeButton: React.FC<LikeButtonProps> = ({
 }) => {
   const [showWowEffect, setShowWowEffect] = useState(false);
   const [particles, setParticles] = useState<Array<{ id: number; x: number; y: number }>>([]);
+  const safeLikeCount = normalizeEngagementCount(likeCount);
 
   // Déclencher l'effet "wow" quand triggerAnimation change
   useEffect(() => {
@@ -76,7 +78,7 @@ const LikeButton: React.FC<LikeButtonProps> = ({
             transition-all duration-200
             relative
             ${isLiked 
-              ? 'bg-red-500/20 hover:bg-red-500/30' 
+              ? 'bg-[#19DB8A]/20 hover:bg-[#19DB8A]/30'
               : 'bg-white/10 hover:bg-white/20'
             }
             disabled:opacity-50 disabled:cursor-not-allowed
@@ -88,7 +90,7 @@ const LikeButton: React.FC<LikeButtonProps> = ({
             className={`
               transition-all duration-200
               ${isLiked 
-                ? 'text-red-500 fill-red-500' 
+                ? 'text-[#19DB8A] fill-[#19DB8A]'
                 : 'text-white/60 group-hover:text-white'
               }
               ${showWowEffect ? 'scale-125' : 'scale-100'}
@@ -101,7 +103,7 @@ const LikeButton: React.FC<LikeButtonProps> = ({
         {showWowEffect && (
           <>
             {/* Pulse principal */}
-            <div className="absolute inset-0 rounded-full bg-red-500/40 animate-pulse" style={{
+            <div className="absolute inset-0 rounded-full bg-[#19DB8A]/40 animate-pulse" style={{
               animation: 'pulse-ring 0.6s ease-out'
             }} />
             
@@ -125,10 +127,10 @@ const LikeButton: React.FC<LikeButtonProps> = ({
         <span className={`
           font-bold
           transition-all duration-200
-          ${isLiked ? 'text-red-500' : 'text-white/60'}
+          ${isLiked ? 'text-[#19DB8A]' : 'text-white/60'}
           ${size === 'sm' ? 'text-xs' : size === 'md' ? 'text-sm' : 'text-base'}
         `}>
-          {Number.isNaN(likeCount) ? 0 : likeCount}
+          {safeLikeCount}
         </span>
       )}
     </div>

@@ -5,7 +5,8 @@ import {
   Match, 
   Pronostic,
   PredictionStats,
-  getMatchesFromFirestore,
+  getMatchFromFirestore,
+  syncMatchesToFirestore,
   submitPrediction,
   getUserPrediction,
   getMatchPredictionStats
@@ -34,10 +35,9 @@ const MatchDetailPage: React.FC = () => {
     
     try {
       setLoading(true);
+      await syncMatchesToFirestore();
       
-      // Charger le match
-      const matches = await getMatchesFromFirestore();
-      const foundMatch = matches.find(m => m.id === id);
+      const foundMatch = await getMatchFromFirestore(id);
       
       if (!foundMatch) {
         setError('Match introuvable');

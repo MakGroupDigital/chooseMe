@@ -1,4 +1,5 @@
 import type { FeedPost } from '../types';
+import { normalizeEngagementCount } from '../utils/engagement';
 
 /**
  * Algorithme de recommandation type TikTok
@@ -24,11 +25,14 @@ function calculateEngagementScore(post: FeedPost): number {
   const LIKE_WEIGHT = 1;
   const COMMENT_WEIGHT = 3; // Les commentaires valent plus que les likes
   const SHARE_WEIGHT = 5; // Les partages valent encore plus
+  const likes = normalizeEngagementCount(post.likes);
+  const comments = normalizeEngagementCount(post.comments);
+  const shares = normalizeEngagementCount(post.shares);
   
   const engagementScore = 
-    (post.likes * LIKE_WEIGHT) +
-    (post.comments * COMMENT_WEIGHT) +
-    (post.shares * SHARE_WEIGHT);
+    (likes * LIKE_WEIGHT) +
+    (comments * COMMENT_WEIGHT) +
+    (shares * SHARE_WEIGHT);
   
   // Normaliser le score (logarithme pour éviter que les vidéos très populaires écrasent tout)
   return Math.log10(engagementScore + 1) * 10;
@@ -61,8 +65,11 @@ function calculateViralScore(post: FeedPost): number {
   const now = new Date().getTime();
   const postDate = new Date(post.createdAt || now).getTime();
   const ageInHours = Math.max((now - postDate) / (1000 * 60 * 60), 1);
+  const likes = normalizeEngagementCount(post.likes);
+  const comments = normalizeEngagementCount(post.comments);
+  const shares = normalizeEngagementCount(post.shares);
   
-  const totalEngagement = post.likes + (post.comments * 3) + (post.shares * 5);
+  const totalEngagement = likes + (comments * 3) + (shares * 5);
   const viralVelocity = totalEngagement / ageInHours;
   
   // Si la vidéo a beaucoup d'engagement en peu de temps, c'est viral

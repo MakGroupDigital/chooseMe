@@ -1,10 +1,10 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Bell, Heart, UserPlus, UserCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { UserType, FeedPost, PostComment } from '../../types';
+import { UserType, FeedPost, PostComment, PostCommentReply } from '../../types';
 import { fetchVideoFeed } from '../../services/feedService';
-import { fetchComments, addComment, likeComment } from '../../services/commentService';
+import { fetchComments, addComment, addCommentReply, likeComment } from '../../services/commentService';
 import { followAthlete, unfollowAthlete, isFollowing, getFollowerCount, getFollowing } from '../../services/followService';
 import { toggleLikePost, getUserLikedPosts } from '../../services/likeService';
 import { shareVideoPost } from '../../services/shareService';
@@ -13,6 +13,8 @@ import { useAuth } from '../../services/firebase';
 import { getFirestoreDb } from '../../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { loadAppSettings, SETTINGS_EVENT } from '../../services/appSettingsService';
+import { normalizeEngagementCount } from '../../utils/engagement';
+import '../../styles/likeButton.css';
 
 const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
   const navigate = useNavigate();
@@ -30,6 +32,9 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
   const [comments, setComments] = useState<PostComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [replyingToComment, setReplyingToComment] = useState<PostComment | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
   const [likedComments, setLikedComments] = useState<Set<string>>(new Set());
   const [followingLoading, setFollowingLoading] = useState<Set<string>>(new Set());
   const [currentUserData, setCurrentUserData] = useState<any>(null);
@@ -37,8 +42,33 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
   const [autoplayEnabled, setAutoplayEnabled] = useState(true);
   const [dataSaverEnabled, setDataSaverEnabled] = useState(false);
   const [videoErrors, setVideoErrors] = useState<Set<string>>(new Set());
+  const [isClearView, setIsClearView] = useState(false);
+  const [likedBurstPostId, setLikedBurstPostId] = useState<string | null>(null);
+  const likedBurstTimer = useRef<number | null>(null);
 
   const userId = currentUser?.uid || '';
+
+  useEffect(() => {
+    return () => {
+      if (likedBurstTimer.current) {
+        window.clearTimeout(likedBurstTimer.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('chooseme:feed-clear-view', {
+      detail: { hidden: isClearView }
+    }));
+  }, [isClearView]);
+
+  useEffect(() => {
+    return () => {
+      window.dispatchEvent(new CustomEvent('chooseme:feed-clear-view', {
+        detail: { hidden: false }
+      }));
+    };
+  }, []);
 
   useEffect(() => {
     // Charge les vidéos Firebase immédiatement avec l'algorithme
@@ -179,14 +209,27 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
       newLiked.delete(post.docPath);
     } else {
       newLiked.add(post.docPath);
+      setLikedBurstPostId(post.id);
+      if (likedBurstTimer.current) {
+        window.clearTimeout(likedBurstTimer.current);
+      }
+      likedBurstTimer.current = window.setTimeout(() => {
+        setLikedBurstPostId(null);
+        likedBurstTimer.current = null;
+      }, 820);
     }
     setLikedPosts(newLiked);
     
     // Mise à jour optimiste du compteur dans le feed
     setFeed(prevFeed => 
       prevFeed.map(p => 
-        p.id === post.id 
-          ? { ...p, likes: isLiked ? Math.max(0, p.likes - 1) : p.likes + 1 }
+        p.id === post.id
+          ? {
+              ...p,
+              likes: isLiked
+                ? Math.max(0, normalizeEngagementCount(p.likes) - 1)
+                : normalizeEngagementCount(p.likes) + 1
+            }
           : p
       )
     );
@@ -197,6 +240,9 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
       console.log('✅ Like mis à jour');
     } catch (error) {
       console.error('❌ Erreur toggle like:', error);
+      if (!isLiked) {
+        setLikedBurstPostId(null);
+      }
       
       // Rollback en cas d'erreur
       const rollbackLiked = new Set(likedPosts);
@@ -209,8 +255,13 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
       
       setFeed(prevFeed => 
         prevFeed.map(p => 
-          p.id === post.id 
-            ? { ...p, likes: isLiked ? p.likes + 1 : Math.max(0, p.likes - 1) }
+          p.id === post.id
+            ? {
+                ...p,
+                likes: isLiked
+                  ? normalizeEngagementCount(p.likes) + 1
+                  : Math.max(0, normalizeEngagementCount(p.likes) - 1)
+              }
             : p
         )
       );
@@ -334,27 +385,35 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
   const closeComments = () => {
     setActiveCommentsPost(null);
     setComments([]);
+    setReplyingToComment(null);
+    setReplyText('');
   };
 
   const handleSendComment = async () => {
     if (!activeCommentsPost || !newComment.trim()) return;
     if (!activeCommentsPost.docPath) return;
+    if (!userId) {
+      navigate('/login');
+      return;
+    }
 
     const optimistic: PostComment = {
       id: `local-${Date.now()}`,
-      userId: userId || 'anonymous',
+      userId,
       userName: currentUserData?.displayName || currentUser?.displayName || 'Utilisateur',
       userAvatar: currentUserData?.avatarUrl || currentUser?.photoURL || '/assets/images/app_launcher_icon.png',
       text: newComment.trim(),
       createdAt: new Date().toLocaleString(),
-      likes: 0
+      likes: 0,
+      replies: [],
+      replyCount: 0
     };
 
     setComments((prev) => [...prev, optimistic]);
     setNewComment('');
 
     try {
-      await addComment({
+      const savedCommentId = await addComment({
         docPath: activeCommentsPost.docPath,
         userId: optimistic.userId,
         userName: optimistic.userName,
@@ -362,10 +421,18 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
         text: optimistic.text
       });
 
+      setComments((prev) =>
+        prev.map((comment) =>
+          comment.id === optimistic.id ? { ...comment, id: savedCommentId } : comment
+        )
+      );
+
       // Met à jour le compteur localement pour le post actif
       setFeed((prev) =>
         prev.map((p) =>
-          p.id === activeCommentsPost.id ? { ...p, comments: p.comments + 1 } : p
+          p.id === activeCommentsPost.id
+            ? { ...p, comments: normalizeEngagementCount(p.comments) + 1 }
+            : p
         )
       );
     } catch (e) {
@@ -424,6 +491,93 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
     }
   };
 
+  const handleSendReply = async (comment: PostComment) => {
+    if (!activeCommentsPost?.docPath || !replyText.trim() || sendingReply) return;
+    if (!userId) {
+      navigate('/login');
+      return;
+    }
+
+    if (comment.id.startsWith('local-')) {
+      alert('Patientez un instant avant de répondre à ce commentaire.');
+      return;
+    }
+
+    const optimisticReply: PostCommentReply = {
+      id: `local-reply-${Date.now()}`,
+      userId,
+      userName: currentUserData?.displayName || currentUser?.displayName || 'Utilisateur',
+      userAvatar: currentUserData?.avatarUrl || currentUser?.photoURL || '/assets/images/app_launcher_icon.png',
+      text: replyText.trim(),
+      createdAt: new Date().toLocaleString()
+    };
+
+    setComments((prev) =>
+      prev.map((item) =>
+        item.id === comment.id
+          ? {
+              ...item,
+              replies: [...(item.replies || []), optimisticReply],
+              replyCount: normalizeEngagementCount(item.replyCount) + 1
+            }
+          : item
+      )
+    );
+    setReplyText('');
+    setReplyingToComment(null);
+    setSendingReply(true);
+
+    try {
+      const savedReplyId = await addCommentReply({
+        docPath: activeCommentsPost.docPath,
+        commentId: comment.id,
+        userId: optimisticReply.userId,
+        userName: optimisticReply.userName,
+        userAvatar: optimisticReply.userAvatar,
+        text: optimisticReply.text
+      });
+
+      setComments((prev) =>
+        prev.map((item) =>
+          item.id === comment.id
+            ? {
+                ...item,
+                replies: (item.replies || []).map((reply) =>
+                  reply.id === optimisticReply.id ? { ...reply, id: savedReplyId } : reply
+                )
+              }
+            : item
+        )
+      );
+
+      setFeed((prev) =>
+        prev.map((p) =>
+          p.id === activeCommentsPost.id
+            ? { ...p, comments: normalizeEngagementCount(p.comments) + 1 }
+            : p
+        )
+      );
+    } catch (error) {
+      console.error('Erreur réponse commentaire:', error);
+      setComments((prev) =>
+        prev.map((item) =>
+          item.id === comment.id
+            ? {
+                ...item,
+                replies: (item.replies || []).filter((reply) => reply.id !== optimisticReply.id),
+                replyCount: Math.max(0, normalizeEngagementCount(item.replyCount) - 1)
+              }
+            : item
+        )
+      );
+      setReplyingToComment(comment);
+      setReplyText(optimisticReply.text);
+      alert("Impossible d'envoyer la réponse pour le moment.");
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
   const openAthleteProfile = (post: FeedPost) => {
     if (!post.userId) return;
     navigate(`/athlete/${post.userId}`);
@@ -432,7 +586,10 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
   return (
     <div className="relative flex h-full min-h-[100dvh] w-full flex-col overflow-hidden bg-[#050505]">
       {/* Dynamic Header */}
-      <header className="absolute left-0 right-0 top-0 z-50 flex items-center justify-between gap-3 border-b border-white/10 bg-black/55 px-3 pt-3 pb-2 pointer-events-none shadow-[0_14px_34px_rgba(0,0,0,0.38)] backdrop-blur-xl">
+      <header className={`pointer-events-none fixed inset-x-0 top-0 z-[120] px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] transition-all duration-300 ${
+        isClearView ? 'invisible -translate-y-6 opacity-0' : 'visible translate-y-0 opacity-100'
+      }`}>
+        <div className="mx-auto flex max-w-[430px] items-center justify-between gap-3 rounded-[24px] border border-white/[0.12] bg-[#050505]/78 px-2.5 py-2 shadow-[0_16px_42px_rgba(0,0,0,0.5)] backdrop-blur-2xl">
         <div className="pointer-events-auto flex min-w-0 flex-1 gap-1 rounded-full border border-white/10 bg-white/[0.06] p-1 backdrop-blur-xl">
           <button 
             onClick={() => setActiveTab('all')}
@@ -463,16 +620,27 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
           >
             {isMuted ? <IconVolumeMuted size={20} /> : <IconVolume size={20} />}
           </button>
-          <button className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={() => navigate('/notifications')}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white backdrop-blur-xl transition-colors hover:text-[#19DB8A]"
+            aria-label="Ouvrir les notifications"
+          >
             <Bell size={17} />
           </button>
-          <div className="h-10 w-10 overflow-hidden rounded-full border-2 border-[#19DB8A] bg-white/10 shadow-[0_0_0_4px_rgba(25,219,138,0.1)]">
+          <button
+            type="button"
+            onClick={() => navigate('/profile')}
+            className="h-10 w-10 overflow-hidden rounded-full border-2 border-[#19DB8A] bg-white/10 shadow-[0_0_0_4px_rgba(25,219,138,0.1)] transition-transform hover:scale-105"
+            aria-label="Ouvrir le profil"
+          >
             <img 
               src={currentUserData?.avatarUrl || currentUser?.photoURL || '/assets/images/app_launcher_icon.png'} 
               alt="Me" 
               className="w-full h-full object-cover" 
             />
-          </div>
+          </button>
+        </div>
         </div>
       </header>
 
@@ -549,8 +717,16 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
             </div>
           </div>
         )}
-        {!loading && !error && feed.map((post, index) => (
-          <div key={`${post.id}-${post.docPath}-${index}`} className="relative h-[100dvh] w-full flex-shrink-0 snap-start overflow-hidden bg-black">
+        {!loading && !error && feed.map((post, index) => {
+          const isPostLiked = Boolean(post.docPath && likedPosts.has(post.docPath));
+          const showLikeBurst = likedBurstPostId === post.id;
+
+          return (
+          <div
+            key={`${post.id}-${post.docPath}-${index}`}
+            className="relative h-[100dvh] w-full flex-shrink-0 snap-start overflow-hidden bg-black"
+            onClick={() => setIsClearView((prev) => !prev)}
+          >
             {/* Vidéo HTML5 en plein écran - lecture automatique sans poster */}
             <video
               id={`video-${index}`}
@@ -611,29 +787,36 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
             )}
 
             {/* Gradient overlay pour meilleure lisibilité */}
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/80" />
+            <div className={`pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/80 transition-opacity duration-300 ${
+              isClearView ? 'opacity-0' : 'opacity-100'
+            }`} />
 
             {/* Interactions Bar */}
-            <div className="absolute right-3 bottom-32 z-20 flex flex-col items-center gap-3">
+            <div
+              onClick={(event) => event.stopPropagation()}
+              className={`absolute right-1 bottom-[4rem] z-20 flex flex-col items-center gap-2 transition-all duration-300 sm:right-2 sm:bottom-[4.75rem] sm:gap-2.5 ${
+                isClearView ? 'translate-x-4 opacity-0 pointer-events-none' : 'translate-x-0 opacity-100'
+              }`}
+            >
               {/* Follow Button */}
               <button
                 onClick={() => handleFollowToggle(post)}
                 disabled={followingLoading.has(post.userId)}
                 className="group flex flex-col items-center"
               >
-                <div className={`flex h-12 w-12 items-center justify-center rounded-full border border-white/10 shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all ${
+                <div className={`flex h-14 w-14 items-center justify-center rounded-full border border-white/10 shadow-[0_14px_34px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all sm:h-16 sm:w-16 ${
                   followingUsers.has(post.userId)
                     ? 'bg-[#19DB8A] text-black'
                     : 'bg-black/45 text-white hover:bg-[#19DB8A]/20 hover:text-[#19DB8A]'
                 } ${followingLoading.has(post.userId) ? 'opacity-50' : ''}`}>
                   {followingUsers.has(post.userId) ? (
-                    <UserCheck size={25} />
+                    <UserCheck size={30} />
                   ) : (
-                    <UserPlus size={25} />
+                    <UserPlus size={30} />
                   )}
                 </div>
                 {followerCounts.has(post.userId) && (
-                  <span className="mt-1 text-[11px] font-extrabold text-white drop-shadow">
+                  <span className="mt-1 text-[12px] font-extrabold text-white drop-shadow">
                     {followerCounts.get(post.userId)}
                   </span>
                 )}
@@ -642,7 +825,7 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
               <div className="flex flex-col items-center">
                 <button
                   onClick={() => openAthleteProfile(post)}
-                  className="h-12 w-12 overflow-hidden rounded-full border-2 border-white/90 bg-white/10 shadow-[0_12px_28px_rgba(0,0,0,0.4)]"
+                  className="h-14 w-14 overflow-hidden rounded-full border-2 border-white/90 bg-white/10 shadow-[0_14px_34px_rgba(0,0,0,0.45)] sm:h-16 sm:w-16"
                 >
                   <img 
                     src={post.userAvatar || '/assets/images/app_launcher_icon.png'} 
@@ -653,8 +836,8 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
                     }}
                   />
                 </button>
-                <div className="relative z-10 -mt-2 flex h-5 w-5 items-center justify-center rounded-full border-2 border-black bg-[#19DB8A]">
-                  <PlusCircle size={12} className="text-black" />
+                <div className="relative z-10 -mt-2.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-black bg-[#19DB8A]">
+                  <PlusCircle size={14} className="text-black" />
                 </div>
               </div>
 
@@ -662,15 +845,40 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
                 onClick={() => toggleLike(post)}
                 className="group flex flex-col items-center"
               >
-                <div className={`flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/45 shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all ${
-                  post.docPath && likedPosts.has(post.docPath) 
-                    ? 'text-[#FF4B5C] scale-110' 
-                    : 'text-white hover:text-[#FF4B5C]'
+                <div className={`relative flex h-14 w-14 items-center justify-center overflow-visible rounded-full border border-white/10 shadow-[0_14px_34px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all sm:h-16 sm:w-16 ${
+                  isPostLiked
+                    ? 'scale-110 bg-[#19DB8A]/20 text-[#19DB8A] shadow-[0_0_34px_rgba(25,219,138,0.35)]'
+                    : 'bg-black/50 text-white hover:bg-[#19DB8A]/15 hover:text-[#19DB8A]'
                 }`}>
-                  <IconLike size={25} />
+                  {showLikeBurst && (
+                    <>
+                      <span className="feed-like-ring absolute inset-0 rounded-full bg-[#19DB8A]/35" />
+                      <span className="absolute -inset-3 rounded-full border border-[#19DB8A]/40 animate-ping" />
+                      {Array.from({ length: 12 }).map((_, particleIndex) => {
+                        const angle = (particleIndex / 12) * Math.PI * 2;
+                        const distance = 74 + (particleIndex % 3) * 10;
+
+                        return (
+                          <span
+                            key={particleIndex}
+                            className="feed-like-particle"
+                            style={{
+                              '--tx': `${Math.cos(angle) * distance}px`,
+                              '--ty': `${Math.sin(angle) * distance}px`,
+                            } as React.CSSProperties & { '--tx': string; '--ty': string }}
+                          />
+                        );
+                      })}
+                    </>
+                  )}
+                  <IconLike
+                    size={31}
+                    filled={isPostLiked}
+                    className={`relative z-10 transition-transform duration-200 ${showLikeBurst ? 'like-button-active scale-125' : ''}`}
+                  />
                 </div>
-                <span className="mt-1 h-4 text-[11px] font-extrabold text-white drop-shadow">
-                  {typeof post.likes === 'number' ? post.likes : 0}
+                <span className={`mt-1 block h-5 min-w-8 text-center text-[12px] font-extrabold leading-5 drop-shadow transition-colors ${isPostLiked ? 'text-[#19DB8A]' : 'text-white'}`}>
+                  {normalizeEngagementCount(post.likes)}
                 </span>
               </button>
 
@@ -678,25 +886,34 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
                 className="group flex flex-col items-center"
                 onClick={() => openComments(post)}
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/45 text-white shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all hover:text-[#19DB8A]">
-                  <IconComment size={25} />
+                <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-black/50 text-white shadow-[0_14px_34px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all hover:bg-[#19DB8A]/15 hover:text-[#19DB8A] sm:h-16 sm:w-16">
+                  <IconComment size={31} />
                 </div>
-                <span className="mt-1 h-4 text-[11px] font-extrabold text-white drop-shadow">{post.comments || 0}</span>
+                <span className="mt-1 block h-5 min-w-8 text-center text-[12px] font-extrabold leading-5 text-white drop-shadow">
+                  {normalizeEngagementCount(post.comments)}
+                </span>
               </button>
 
               <button 
                 onClick={() => handleShare(post)}
                 className="group flex flex-col items-center"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-black/45 text-white shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all hover:text-[#19DB8A]">
-                  <IconShare size={25} />
+                <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-black/50 text-white shadow-[0_14px_34px_rgba(0,0,0,0.4)] backdrop-blur-xl transition-all hover:bg-[#19DB8A]/15 hover:text-[#19DB8A] sm:h-16 sm:w-16">
+                  <IconShare size={31} />
                 </div>
-                <span className="mt-1 h-4 text-[11px] font-extrabold text-white drop-shadow">{post.shares || 0}</span>
+                <span className="mt-1 block h-5 min-w-8 text-center text-[12px] font-extrabold leading-5 text-white drop-shadow">
+                  {normalizeEngagementCount(post.shares)}
+                </span>
               </button>
             </div>
 
             {/* Post Info */}
-            <div className="absolute left-4 right-20 bottom-32 z-20 rounded-2xl bg-gradient-to-r from-black/45 via-black/20 to-transparent p-3 backdrop-blur-[2px]">
+            <div
+              onClick={(event) => event.stopPropagation()}
+              className={`absolute left-4 right-24 bottom-[5.75rem] z-20 rounded-2xl bg-gradient-to-r from-black/45 via-black/20 to-transparent p-2.5 backdrop-blur-[2px] transition-all duration-300 sm:right-28 sm:bottom-[6.75rem] ${
+                isClearView ? 'translate-y-5 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
+              }`}
+            >
               <button
                 onClick={() => openAthleteProfile(post)}
                 className="mb-1 flex max-w-full items-center gap-2 text-sm font-extrabold text-white drop-shadow"
@@ -723,14 +940,15 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
               )}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Overlay commentaires */}
       {activeCommentsPost && (
-        <div className="fixed inset-0 z-[80] bg-black/60 flex items-end justify-center">
+        <div className="fixed inset-0 z-[140] bg-black/60 flex items-end justify-center">
           {/* On remonte nettement le panneau pour éviter toute superposition avec la bottom bar */}
-          <div className="w-full max-w-md bg-[#050505] rounded-t-3xl p-4 border-t border-white/10 mb-20">
+          <div className="mb-20 max-h-[72dvh] w-full max-w-md rounded-t-3xl border-t border-white/10 bg-[#050505] p-4">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-white font-semibold text-sm">
                 Commentaires sur la vidéo de @{activeCommentsPost.userName}
@@ -743,7 +961,7 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
               </button>
             </div>
             {/* Liste des commentaires */}
-            <div className="h-36 overflow-y-auto custom-scrollbar space-y-3 mb-4">
+            <div className="mb-4 h-[42dvh] overflow-y-auto custom-scrollbar space-y-4 pr-1">
               {commentsLoading && (
                 <p className="text-white/50 text-xs">Chargement des commentaires...</p>
               )}
@@ -756,7 +974,7 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
                 <div key={c.id} className="flex items-start gap-2">
                   <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
                     {c.userAvatar ? (
-                      <img src={c.userAvatar} className="w-full h-full object-cover" />
+                      <img src={c.userAvatar} alt={c.userName} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-xs text-white/70">
                         {c.userName.charAt(0).toUpperCase()}
@@ -769,22 +987,94 @@ const HomeChoosePage: React.FC<{ userType: UserType }> = ({ userType }) => {
                         <span className="text-white text-xs font-semibold">@{c.userName}</span>
                         <span className="text-white/30 text-[10px]">{c.createdAt}</span>
                       </div>
-                      <button
-                        onClick={() => handleLikeComment(c)}
-                        className={`flex items-center gap-1 px-2 py-0.5 rounded-full border ${
-                          likedComments.has(c.id)
-                            ? 'border-[#19DB8A] text-[#19DB8A]'
-                            : 'border-white/20 text-white/60'
-                        } text-[10px]`}
-                      >
-                        <Heart
-                          size={12}
-                          className={likedComments.has(c.id) ? 'fill-current' : ''}
-                        />
-                        <span>{c.likes}</span>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => {
+                            setReplyingToComment(c);
+                            setReplyText('');
+                          }}
+                          className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/55 transition hover:border-[#19DB8A]/50 hover:text-[#19DB8A]"
+                        >
+                          Répondre
+                        </button>
+                        <button
+                          onClick={() => handleLikeComment(c)}
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded-full border ${
+                            likedComments.has(c.id)
+                              ? 'border-[#19DB8A] text-[#19DB8A]'
+                              : 'border-white/20 text-white/60'
+                          } text-[10px]`}
+                        >
+                          <Heart
+                            size={12}
+                            className={likedComments.has(c.id) ? 'fill-current' : ''}
+                          />
+                          <span>{normalizeEngagementCount(c.likes)}</span>
+                        </button>
+                      </div>
                     </div>
                     <p className="text-white/80 text-xs mt-0.5">{c.text}</p>
+                    {Boolean(c.replies?.length) && (
+                      <div className="mt-2 space-y-2 border-l border-white/10 pl-3">
+                        {(c.replies || []).map((reply) => (
+                          <div key={reply.id} className="flex gap-2">
+                            <div className="h-6 w-6 flex-shrink-0 overflow-hidden rounded-full bg-white/10">
+                              {reply.userAvatar ? (
+                                <img src={reply.userAvatar} alt={reply.userName} className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-[10px] text-white/60">
+                                  {reply.userName.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1 rounded-2xl bg-white/[0.04] px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="truncate text-[11px] font-semibold text-white/90">@{reply.userName}</span>
+                                <span className="text-[9px] text-white/28">{reply.createdAt}</span>
+                              </div>
+                              <p className="mt-0.5 text-[11px] leading-snug text-white/72">{reply.text}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {replyingToComment?.id === c.id && (
+                      <div className="mt-2 rounded-2xl border border-[#19DB8A]/20 bg-[#19DB8A]/[0.05] p-2">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-[10px] font-semibold text-[#19DB8A]">Réponse à @{c.userName}</span>
+                          <button
+                            onClick={() => {
+                              setReplyingToComment(null);
+                              setReplyText('');
+                            }}
+                            className="text-[10px] text-white/45"
+                          >
+                            Annuler
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={replyText}
+                            onChange={(event) => setReplyText(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' && replyText.trim()) {
+                                handleSendReply(c);
+                              }
+                            }}
+                            placeholder="Écrire une réponse..."
+                            className="min-w-0 flex-1 rounded-full border border-white/15 bg-black/40 px-3 py-1.5 text-xs text-white outline-none"
+                          />
+                          <button
+                            onClick={() => handleSendReply(c)}
+                            disabled={!replyText.trim() || sendingReply}
+                            className="rounded-full bg-[#19DB8A] px-3 py-1.5 text-[11px] font-bold text-black disabled:opacity-40"
+                          >
+                            Répondre
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

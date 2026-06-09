@@ -1,5 +1,6 @@
 import { getFirebaseApp } from './firebase';
 import { getFirestore, collection, addDoc, serverTimestamp, getDocs, onSnapshot, doc, updateDoc, increment, deleteDoc, getDoc } from 'firebase/firestore';
+import { normalizeEngagementCount } from '../utils/engagement';
 
 export interface PerformanceVideo {
   id?: string;
@@ -34,11 +35,180 @@ interface CloudinaryUploadResult {
   height?: number;
 }
 
-async function uploadVideoToCloudinary(userId: string, videoBlob: Blob): Promise<CloudinaryUploadResult> {
-  const formData = new FormData();
+interface CloudinarySignedUpload {
+  cloudName: string;
+  apiKey: string;
+  signature: string;
+  timestamp: number;
+  folder: string;
+  publicId: string;
+  resourceType: 'video';
+}
+
+interface CloudinaryDirectUploadPayload {
+  secure_url?: string;
+  public_id?: string;
+  resource_type?: 'video';
+  format?: string;
+  bytes?: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  done?: boolean;
+  error?: { message?: string } | string;
+}
+
+const COMMENT_COUNT_FIELDS = [
+  'num_comments',
+  'comments',
+  'commentCount',
+  'comment_count',
+  'commentsCount',
+  'numComments'
+];
+
+const getCommentCount = (data: Record<string, any>): number =>
+  Math.max(...COMMENT_COUNT_FIELDS.map((field) => normalizeEngagementCount(data[field])));
+
+const SERVER_UPLOAD_LIMIT_BYTES = 3.5 * 1024 * 1024;
+const VIDEO_CHUNK_SIZE_BYTES = 6 * 1024 * 1024;
+
+const getVideoMimeType = (videoBlob: Blob): string => {
   const rawMimeType = videoBlob.type?.startsWith('video/') ? videoBlob.type : 'video/webm';
-  const mimeType = rawMimeType.split(';')[0] || 'video/webm';
-  const extension = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+  return rawMimeType.split(';')[0] || 'video/webm';
+};
+
+const getVideoExtension = (mimeType: string): string =>
+  mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+
+const getCloudinaryThumbnailUrl = (cloudName: string, publicId: string): string =>
+  `https://res.cloudinary.com/${cloudName}/video/upload/so_0,w_720,c_scale/${publicId}.jpg`;
+
+const formatCloudinaryDirectError = (payload: CloudinaryDirectUploadPayload | null, fallback: string): string => {
+  if (!payload?.error) return fallback;
+  if (typeof payload.error === 'string') return payload.error;
+  return payload.error.message || fallback;
+};
+
+async function getCloudinarySignedVideoUpload(userId: string): Promise<CloudinarySignedUpload> {
+  const response = await fetch('/api/cloudinary/sign-upload', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ userId, resourceType: 'video' })
+  });
+
+  const payload = await response.json().catch(() => null) as Partial<CloudinarySignedUpload> | { error?: string; detail?: string } | null;
+
+  if (
+    !response.ok ||
+    !payload ||
+    !('cloudName' in payload) ||
+    !payload.cloudName ||
+    !payload.apiKey ||
+    !payload.signature ||
+    !payload.timestamp ||
+    !payload.folder ||
+    !payload.publicId ||
+    payload.resourceType !== 'video'
+  ) {
+    const detail = payload && 'detail' in payload && payload.detail ? ` (${payload.detail})` : '';
+    const error = payload && 'error' in payload && payload.error ? payload.error : 'Impossible de préparer l’upload Cloudinary.';
+    throw new Error(`${error}${detail}`);
+  }
+
+  return payload as CloudinarySignedUpload;
+}
+
+async function postCloudinaryVideoChunk(
+  videoBlob: Blob,
+  signedUpload: CloudinarySignedUpload,
+  uploadId: string,
+  start: number,
+  end: number,
+  fileName: string,
+  mimeType: string
+): Promise<CloudinaryDirectUploadPayload> {
+  const formData = new FormData();
+  const chunk = videoBlob.slice(start, end + 1, mimeType);
+
+  formData.append('file', chunk, fileName);
+  formData.append('api_key', signedUpload.apiKey);
+  formData.append('timestamp', String(signedUpload.timestamp));
+  formData.append('signature', signedUpload.signature);
+  formData.append('folder', signedUpload.folder);
+  formData.append('public_id', signedUpload.publicId);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${signedUpload.cloudName}/video/upload`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Range': `bytes ${start}-${end}/${videoBlob.size}`,
+        'X-Unique-Upload-Id': uploadId
+      },
+      body: formData
+    }
+  );
+  const payload = await response.json().catch(() => null) as CloudinaryDirectUploadPayload | null;
+
+  if (!response.ok || !payload) {
+    throw new Error(formatCloudinaryDirectError(payload, 'Impossible d’uploader la vidéo sur Cloudinary.'));
+  }
+
+  return payload;
+}
+
+async function uploadVideoDirectlyToCloudinary(userId: string, videoBlob: Blob): Promise<CloudinaryUploadResult> {
+  const signedUpload = await getCloudinarySignedVideoUpload(userId);
+  const mimeType = getVideoMimeType(videoBlob);
+  const fileName = `performance.${getVideoExtension(mimeType)}`;
+  const uploadId = `${signedUpload.publicId}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  let finalPayload: CloudinaryDirectUploadPayload | null = null;
+
+  for (let start = 0; start < videoBlob.size; start += VIDEO_CHUNK_SIZE_BYTES) {
+    const end = Math.min(start + VIDEO_CHUNK_SIZE_BYTES, videoBlob.size) - 1;
+    finalPayload = await postCloudinaryVideoChunk(
+      videoBlob,
+      signedUpload,
+      uploadId,
+      start,
+      end,
+      fileName,
+      mimeType
+    );
+  }
+
+  if (!finalPayload?.secure_url) {
+    throw new Error(formatCloudinaryDirectError(finalPayload, 'Impossible de finaliser l’upload vidéo sur Cloudinary.'));
+  }
+
+  const publicId = finalPayload.public_id || `${signedUpload.folder}/${signedUpload.publicId}`;
+
+  return {
+    provider: 'cloudinary',
+    videoUrl: finalPayload.secure_url,
+    secureUrl: finalPayload.secure_url,
+    thumbnailUrl: getCloudinaryThumbnailUrl(signedUpload.cloudName, publicId),
+    publicId,
+    resourceType: 'video',
+    format: finalPayload.format,
+    bytes: finalPayload.bytes,
+    duration: finalPayload.duration,
+    width: finalPayload.width,
+    height: finalPayload.height
+  };
+}
+
+async function uploadVideoToCloudinary(userId: string, videoBlob: Blob): Promise<CloudinaryUploadResult> {
+  if (videoBlob.size > SERVER_UPLOAD_LIMIT_BYTES) {
+    return uploadVideoDirectlyToCloudinary(userId, videoBlob);
+  }
+
+  const formData = new FormData();
+  const mimeType = getVideoMimeType(videoBlob);
+  const extension = getVideoExtension(mimeType);
   const uploadBlob = new Blob([videoBlob], { type: mimeType });
   formData.append('file', uploadBlob, `performance.${extension}`);
   formData.append('userId', userId);
@@ -49,6 +219,10 @@ async function uploadVideoToCloudinary(userId: string, videoBlob: Blob): Promise
   });
 
   const payload = await response.json().catch(() => null);
+
+  if (response.status === 413) {
+    return uploadVideoDirectlyToCloudinary(userId, videoBlob);
+  }
 
   if (!response.ok || !payload?.videoUrl) {
     const detailValue = typeof payload?.detail === 'string'
@@ -107,6 +281,7 @@ export async function uploadPerformanceVideo(
       createdAt: serverTimestamp(),
       likes: 0,
       comments: 0,
+      num_comments: 0,
       shares: 0,
       userName,
       userAvatar: userAvatar || '',
@@ -159,9 +334,9 @@ export async function getUserPerformanceVideos(userId: string): Promise<Performa
         caption: data.caption,
         title: data.title,
         createdAt: data.createdAt,
-        likes: data.likes || 0,
-        comments: data.comments || 0,
-        shares: data.shares || 0,
+        likes: normalizeEngagementCount(data.likes),
+        comments: getCommentCount(data),
+        shares: normalizeEngagementCount(data.shares),
         processed: data.processed || false,
         format: data.format || 'webm',
         cloudinaryPublicId: data.cloudinaryPublicId || data.publicId || '',
@@ -210,9 +385,9 @@ export function listenToPerformanceVideos(
             caption: data.caption,
             title: data.title,
             createdAt: data.createdAt,
-            likes: data.likes || 0,
-            comments: data.comments || 0,
-            shares: data.shares || 0,
+            likes: normalizeEngagementCount(data.likes),
+            comments: getCommentCount(data),
+            shares: normalizeEngagementCount(data.shares),
             processed: data.processed || false,
             format: data.format || 'webm',
             cloudinaryPublicId: data.cloudinaryPublicId || data.publicId || '',
@@ -295,7 +470,8 @@ export async function incrementVideoComments(userId: string, videoId: string): P
     const videoRef = doc(db, 'users', userId, 'performances', videoId);
     
     await updateDoc(videoRef, {
-      comments: increment(1)
+      comments: increment(1),
+      num_comments: increment(1)
     });
     
     console.log('✅ Compteur de commentaires incrémenté pour la vidéo:', videoId);

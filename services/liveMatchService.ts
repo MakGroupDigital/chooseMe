@@ -58,26 +58,68 @@ export interface PredictionStats {
   teamBPercentage: number;
 }
 
-// Configuration API TheSportsDB (100% gratuit, sans clé)
+// Configuration API TheSportsDB (gratuit en V1, sans clé côté client)
 const THESPORTSDB_BASE_URL = 'https://www.thesportsdb.com/api/v1/json/3';
 
-// IDs des ligues supportées
-const SUPPORTED_LEAGUES: Record<string, string> = {
-  'Premier League': '4328',
-  'La Liga': '4335',
-  'Bundesliga': '4331',
-  'Serie A': '4332',
-  'Ligue 1': '4334',
-  'Champions League': '4480',
-  'Europa League': '4481',
+const SUPPORTED_LEAGUES: Array<{ name: string; id: string; priority: number }> = [
+  { name: 'FIFA World Cup', id: '4429', priority: 1 },
+  { name: 'UEFA Champions League', id: '4480', priority: 2 },
+  { name: 'UEFA Europa League', id: '4481', priority: 3 },
+  { name: 'Copa Libertadores', id: '4501', priority: 4 },
+  { name: 'English Premier League', id: '4328', priority: 5 },
+  { name: 'Spanish La Liga', id: '4335', priority: 6 },
+  { name: 'German Bundesliga', id: '4331', priority: 7 },
+  { name: 'Italian Serie A', id: '4332', priority: 8 },
+  { name: 'French Ligue 1', id: '4334', priority: 9 },
+  { name: 'Scottish Premier League', id: '4330', priority: 10 }
+];
+
+const REQUEST_DELAY_MS = 90;
+const REQUEST_BATCH_SIZE = 8;
+const UPCOMING_LIMIT = 28;
+const RECENT_LIMIT = 12;
+const DAY_LOOKAHEAD = 14;
+const DAY_LOOKBACK = 2;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const runInBatches = async <T, R>(
+  items: T[],
+  batchSize: number,
+  worker: (item: T) => Promise<R>
+): Promise<R[]> => {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    results.push(...await Promise.all(batch.map(worker)));
+    if (i + batchSize < items.length) {
+      await sleep(REQUEST_DELAY_MS);
+    }
+  }
+  return results;
 };
 
-// Cache pour éviter trop de requêtes
-let matchesCache: { data: Match[]; timestamp: number } | null = null;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-const REQUEST_DELAY_MS = 120;
-const UPCOMING_LIMIT = 8;
-const RECENT_LIMIT = 8;
+const toDateKey = (date: Date): string => date.toISOString().slice(0, 10);
+
+const addDays = (base: Date, amount: number): Date => {
+  const next = new Date(base);
+  next.setDate(next.getDate() + amount);
+  return next;
+};
+
+const normalizeText = (value: string): string =>
+  value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const getLeaguePriority = (leagueName: string): number => {
+  const normalized = normalizeText(leagueName);
+  const match = SUPPORTED_LEAGUES.find((league) => normalized.includes(normalizeText(league.name)));
+  if (match) return match.priority;
+  if (normalized.includes('world cup')) return 1;
+  if (normalized.includes('champions league')) return 2;
+  if (normalized.includes('europa league')) return 3;
+  if (normalized.includes('libertadores')) return 4;
+  return 99;
+};
 
 /**
  * Récupère des matchs réels (live/à venir/récents) depuis TheSportsDB.
@@ -85,68 +127,59 @@ const RECENT_LIMIT = 8;
  */
 export async function fetchTodayMatches(): Promise<Match[]> {
   try {
-    // Vérifier le cache
-    if (matchesCache && Date.now() - matchesCache.timestamp < CACHE_DURATION) {
-      console.log('📦 Utilisation du cache pour les matchs');
-      return matchesCache.data;
-    }
-
     const today = new Date();
-    const dateStr = today.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-    console.log(`🔍 Récupération des matchs réels autour du ${dateStr}`);
+    console.log(`🔍 Récupération sans cache des matchs réels autour du ${toDateKey(today)}`);
     
     const allMatches: Match[] = [];
     const seenEventIds = new Set<string>();
-    
-    // Récupérer les matchs pour chaque ligue (jour + prochains + récents)
-    for (const [leagueName, leagueId] of Object.entries(SUPPORTED_LEAGUES)) {
-      try {
-        const endpointConfigs = [
-          `${THESPORTSDB_BASE_URL}/eventsday.php?d=${dateStr}&l=${leagueId}`,
-          `${THESPORTSDB_BASE_URL}/eventsnextleague.php?id=${leagueId}`,
-          `${THESPORTSDB_BASE_URL}/eventspastleague.php?id=${leagueId}`,
-        ];
 
-        for (const url of endpointConfigs) {
-          console.log(`📡 Requête: ${url}`);
-          const response = await fetch(url);
-          if (!response.ok) {
-            console.warn(`⚠️ Réponse API non OK (${response.status}) pour ${leagueName}`);
-            continue;
-          }
+    const ingestEvents = (events: any[] | undefined, fallbackLeagueName = '') => {
+      if (!Array.isArray(events)) return;
 
-          const data = await response.json();
-          if (!data?.events || !Array.isArray(data.events)) {
-            continue;
-          }
+      for (const event of events) {
+        try {
+          const eventId = String(event?.idEvent || '');
+          if (!eventId || seenEventIds.has(eventId)) continue;
 
-          for (const event of data.events) {
-            try {
-              const eventId = String(event?.idEvent || '');
-              if (!eventId || seenEventIds.has(eventId)) {
-                continue;
-              }
+          const match = parseTheSportsDbEvent(event, fallbackLeagueName);
+          if (!match.teamAName || !match.teamBName || !match.externalId) continue;
 
-              const match = parseTheSportsDbEvent(event, leagueName);
-              // N'injecter que des matchs réellement exploitables.
-              if (!match.teamAName || !match.teamBName) {
-                continue;
-              }
-
-              seenEventIds.add(eventId);
-              allMatches.push(match);
-            } catch (e) {
-              console.warn('⚠️ Erreur parsing match:', e);
-            }
-          }
-
-          // Petite pause pour éviter de surcharger l'API
-          await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS));
+          seenEventIds.add(eventId);
+          allMatches.push(match);
+        } catch (e) {
+          console.warn('⚠️ Erreur parsing match:', e);
         }
-      } catch (error) {
-        console.error(`❌ Erreur pour ${leagueName}:`, error);
       }
+    };
+
+    const requests: Array<{ url: string; fallbackLeagueName?: string }> = [];
+
+    for (const league of SUPPORTED_LEAGUES) {
+      requests.push(
+        { url: `${THESPORTSDB_BASE_URL}/eventsnextleague.php?id=${league.id}`, fallbackLeagueName: league.name },
+        { url: `${THESPORTSDB_BASE_URL}/eventspastleague.php?id=${league.id}`, fallbackLeagueName: league.name }
+      );
     }
+
+    for (let offset = -DAY_LOOKBACK; offset <= DAY_LOOKAHEAD; offset++) {
+      const dateStr = toDateKey(addDays(today, offset));
+      requests.push({ url: `${THESPORTSDB_BASE_URL}/eventsday.php?d=${dateStr}&s=Soccer` });
+    }
+
+    await runInBatches(requests, REQUEST_BATCH_SIZE, async ({ url, fallbackLeagueName }) => {
+      try {
+        console.log(`📡 Requête: ${url}`);
+        const response = await fetch(url);
+        if (!response.ok) {
+          console.warn(`⚠️ Réponse API non OK (${response.status}) pour ${url}`);
+          return;
+        }
+        const data = await response.json();
+        ingestEvents(data?.events, fallbackLeagueName);
+      } catch (error) {
+        console.error('❌ Erreur récupération API football:', error);
+      }
+    });
     
     // Si aucun match réel trouvé, retourner une liste vide (jamais de faux matchs)
     if (allMatches.length === 0) {
@@ -159,7 +192,11 @@ export async function fetchTodayMatches(): Promise<Match[]> {
     const liveMatches = allMatches.filter(m => m.status === 'live');
     const upcomingMatches = allMatches
       .filter(m => m.status === 'scheduled' && m.startTime.getTime() >= now)
-      .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+      .sort((a, b) => {
+        const priorityDiff = getLeaguePriority(a.competition) - getLeaguePriority(b.competition);
+        if (priorityDiff !== 0) return priorityDiff;
+        return a.startTime.getTime() - b.startTime.getTime();
+      })
       .slice(0, UPCOMING_LIMIT);
     const recentFinishedMatches = allMatches
       .filter(m => m.status === 'finished')
@@ -168,14 +205,13 @@ export async function fetchTodayMatches(): Promise<Match[]> {
     
     const curatedMatches = [...liveMatches, ...upcomingMatches, ...recentFinishedMatches];
     
-    // Trier par heure de début
-    curatedMatches.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-    
-    // Mettre en cache
-    matchesCache = {
-      data: curatedMatches,
-      timestamp: Date.now()
-    };
+    curatedMatches.sort((a, b) => {
+      if (a.status === 'live' && b.status !== 'live') return -1;
+      if (b.status === 'live' && a.status !== 'live') return 1;
+      const priorityDiff = getLeaguePriority(a.competition) - getLeaguePriority(b.competition);
+      if (priorityDiff !== 0) return priorityDiff;
+      return a.startTime.getTime() - b.startTime.getTime();
+    });
     
     console.log(`✅ Total: ${curatedMatches.length} matchs réels récupérés`);
     
@@ -191,11 +227,16 @@ export async function fetchTodayMatches(): Promise<Match[]> {
  */
 function parseTheSportsDbEvent(event: any, leagueName: string): Match {
   // Parser la date et l'heure
-  const dateStr = event.dateEvent;
-  const timeStr = event.strTime || event.strTimeLocal;
+  const dateStr = event.dateEventLocal || event.dateEvent;
+  const timeStr = event.strTimeLocal || event.strTime;
   
   let startTime = new Date();
-  if (dateStr) {
+  if (event.strTimestamp) {
+    const timestampDate = new Date(event.strTimestamp);
+    if (!Number.isNaN(timestampDate.getTime())) {
+      startTime = timestampDate;
+    }
+  } else if (dateStr) {
     startTime = new Date(dateStr);
     if (timeStr) {
       const [hours, minutes] = String(timeStr).split(':');
@@ -231,13 +272,15 @@ function parseTheSportsDbEvent(event: any, leagueName: string): Match {
     statusStr.includes('in play')
   ) {
     status = 'live';
-  } else if (statusStr.includes('postponed') || statusStr.includes('cancelled')) {
+  } else if (statusStr.includes('postponed') || statusStr.includes('cancelled') || String(event.strPostponed || '').toLowerCase() === 'yes') {
     status = 'postponed';
   } else if (hasScore) {
     // Certaines réponses n'ont pas strStatus fiable : la présence du score indique terminé/en cours.
     status = startTime.getTime() < Date.now() ? 'finished' : 'scheduled';
   }
   
+  const predictionsEnabled = status === 'scheduled' && startTime.getTime() > Date.now();
+
   return {
     id: String(event.idEvent || ''),
     externalId: String(event.idEvent || ''),
@@ -245,13 +288,13 @@ function parseTheSportsDbEvent(event: any, leagueName: string): Match {
     teamALogo: event.strHomeTeamBadge || '',
     teamBName: event.strAwayTeam || '',
     teamBLogo: event.strAwayTeamBadge || '',
-    competition: event.strLeague || leagueName,
+    competition: event.strLeague || leagueName || 'Football',
     startTime,
     status,
     scoreA: Number.parseInt(String(event.intHomeScore ?? '0'), 10) || 0,
     scoreB: Number.parseInt(String(event.intAwayScore ?? '0'), 10) || 0,
     matchMinute: undefined,
-    predictionsEnabled: status === 'scheduled',
+    predictionsEnabled,
     rewardAmount: 100,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -290,8 +333,8 @@ export async function syncMatchesToFirestore(): Promise<{ created: number; updat
             score_a: match.scoreA,
             score_b: match.scoreB,
             match_minute: match.matchMinute || 0,
-            predictions_enabled: true,
-            reward_amount: 100,
+            predictions_enabled: match.predictionsEnabled,
+            reward_amount: match.rewardAmount,
             created_at: serverTimestamp(),
             updated_at: serverTimestamp(),
           });
@@ -303,17 +346,34 @@ export async function syncMatchesToFirestore(): Promise<{ created: number; updat
           const existingData = existingDoc.data();
           
           // Ne mettre à jour que si les données ont changé
-          if (existingData.status !== match.status ||
-              existingData.score_a !== match.scoreA ||
-              existingData.score_b !== match.scoreB ||
-              Number(existingData.reward_amount || 0) !== 100) {
+          const shouldUpdate =
+            existingData.status !== match.status ||
+            existingData.score_a !== match.scoreA ||
+            existingData.score_b !== match.scoreB ||
+            existingData.team_a_name !== match.teamAName ||
+            existingData.team_b_name !== match.teamBName ||
+            existingData.team_a_logo !== match.teamALogo ||
+            existingData.team_b_logo !== match.teamBLogo ||
+            existingData.competition !== match.competition ||
+            existingData.predictions_enabled !== match.predictionsEnabled ||
+            Number(existingData.reward_amount || 0) !== match.rewardAmount ||
+            existingData.start_time?.toDate?.().getTime?.() !== match.startTime.getTime();
+
+          if (shouldUpdate) {
             
             await updateDoc(existingDoc.ref, {
+              team_a_name: match.teamAName,
+              team_a_logo: match.teamALogo,
+              team_b_name: match.teamBName,
+              team_b_logo: match.teamBLogo,
+              competition: match.competition,
+              start_time: Timestamp.fromDate(match.startTime),
               status: match.status,
               score_a: match.scoreA,
               score_b: match.scoreB,
               match_minute: match.matchMinute || 0,
-              reward_amount: 100,
+              predictions_enabled: match.predictionsEnabled,
+              reward_amount: match.rewardAmount,
               updated_at: serverTimestamp(),
             });
             updated++;
@@ -338,6 +398,28 @@ export async function syncMatchesToFirestore(): Promise<{ created: number; updat
   }
 }
 
+const mapMatchDocToMatch = (docSnapshot: any): Match => {
+  const data = docSnapshot.data();
+  return {
+    id: docSnapshot.id,
+    externalId: data.externalId || data.external_id,
+    teamAName: data.team_a_name,
+    teamALogo: data.team_a_logo,
+    teamBName: data.team_b_name,
+    teamBLogo: data.team_b_logo,
+    competition: data.competition,
+    startTime: data.start_time?.toDate ? data.start_time.toDate() : new Date(),
+    status: data.status,
+    scoreA: data.score_a,
+    scoreB: data.score_b,
+    matchMinute: data.match_minute,
+    predictionsEnabled: data.predictions_enabled,
+    rewardAmount: Number(data.reward_amount || 100),
+    createdAt: data.created_at?.toDate() || new Date(),
+    updatedAt: data.updated_at?.toDate() || new Date(),
+  };
+};
+
 /**
  * Récupère les matchs depuis Firestore
  */
@@ -360,30 +442,51 @@ export async function getMatchesFromFirestore(): Promise<Match[]> {
     
     const snapshot = await getDocs(q);
     
-    return snapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        externalId: data.externalId || data.external_id,
-        teamAName: data.team_a_name,
-        teamALogo: data.team_a_logo,
-        teamBName: data.team_b_name,
-        teamBLogo: data.team_b_logo,
-        competition: data.competition,
-        startTime: data.start_time.toDate(),
-        status: data.status,
-        scoreA: data.score_a,
-        scoreB: data.score_b,
-        matchMinute: data.match_minute,
-        predictionsEnabled: data.predictions_enabled,
-        rewardAmount: Number(data.reward_amount || 100),
-        createdAt: data.created_at?.toDate() || new Date(),
-        updatedAt: data.updated_at?.toDate() || new Date(),
-      };
-    });
+    return snapshot.docs.map(mapMatchDocToMatch);
   } catch (error) {
     console.error('Erreur récupération matchs Firestore:', error);
-    return [];
+    try {
+      const matchesRef = collection(db, 'matches');
+      const snapshot = await getDocs(matchesRef);
+      const windowStart = new Date();
+      windowStart.setDate(windowStart.getDate() - 1);
+      windowStart.setHours(0, 0, 0, 0);
+      const windowEnd = new Date();
+      windowEnd.setDate(windowEnd.getDate() + 10);
+      windowEnd.setHours(23, 59, 59, 999);
+
+      return snapshot.docs
+        .map(mapMatchDocToMatch)
+        .filter((match) => match.startTime >= windowStart && match.startTime <= windowEnd)
+        .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+    } catch (fallbackError) {
+      console.error('Erreur fallback matchs Firestore:', fallbackError);
+      return [];
+    }
+  }
+}
+
+export async function getMatchFromFirestore(matchId: string): Promise<Match | null> {
+  try {
+    const matchSnap = await getDoc(doc(db, 'matches', matchId));
+    if (matchSnap.exists()) {
+      return mapMatchDocToMatch(matchSnap);
+    }
+
+    const byExternalId = query(
+      collection(db, 'matches'),
+      where('externalId', '==', matchId),
+      limit(1)
+    );
+    const snapshot = await getDocs(byExternalId);
+    if (!snapshot.empty) {
+      return mapMatchDocToMatch(snapshot.docs[0]);
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Erreur récupération match Firestore:', error);
+    return null;
   }
 }
 
@@ -429,7 +532,9 @@ export async function submitPrediction(
     }
     
     const matchData = matchDoc.data();
-    if (matchData.status !== 'scheduled') {
+    const startTime = matchData.start_time?.toDate ? matchData.start_time.toDate() : null;
+    const predictionsEnabled = matchData.predictions_enabled !== false;
+    if (matchData.status !== 'scheduled' || !predictionsEnabled || !startTime || startTime.getTime() <= Date.now()) {
       return { success: false, error: 'Les pronostics sont fermés pour ce match' };
     }
     
@@ -660,19 +765,22 @@ export async function getUserPredictions(userId: string): Promise<Pronostic[]> {
 export async function getMatchPredictionStats(matchId: string): Promise<PredictionStats> {
   try {
     const pronosticsRef = collection(db, 'pronostics');
-    const q = query(
-      pronosticsRef,
-      where('match_ref', '==', doc(db, 'matches', matchId))
-    );
-    
-    const snapshot = await getDocs(q);
+    const strictQ = query(pronosticsRef, where('match_id', '==', matchId));
+    const legacyQ = query(pronosticsRef, where('match_ref', '==', doc(db, 'matches', matchId)));
+    const [strictSnapshot, legacySnapshot] = await Promise.all([
+      getDocs(strictQ),
+      getDocs(legacyQ).catch(() => null)
+    ]);
     
     let teamACount = 0;
     let drawCount = 0;
     let teamBCount = 0;
+    const seen = new Set<string>();
     
-    snapshot.docs.forEach(doc => {
-      const data = doc.data();
+    const countPrediction = (docSnapshot: any) => {
+      if (seen.has(docSnapshot.id)) return;
+      seen.add(docSnapshot.id);
+      const data = docSnapshot.data();
       switch (data.prediction) {
         case 'team_a':
           teamACount++;
@@ -684,9 +792,12 @@ export async function getMatchPredictionStats(matchId: string): Promise<Predicti
           teamBCount++;
           break;
       }
-    });
+    };
     
-    const total = snapshot.size;
+    strictSnapshot.docs.forEach(countPrediction);
+    legacySnapshot?.docs.forEach(countPrediction);
+    
+    const total = seen.size;
     
     return {
       totalPredictions: total,
@@ -732,20 +843,23 @@ async function processMatchPredictions(matchId: string, match: Match): Promise<v
     
     // Récupérer tous les pronostics en attente
     const pronosticsRef = collection(db, 'pronostics');
-    const q = query(
-      pronosticsRef,
-      where('match_ref', '==', doc(db, 'matches', matchId)),
-      where('status', '==', 'pending')
-    );
-    
-    const snapshot = await getDocs(q);
+    const strictQ = query(pronosticsRef, where('match_id', '==', matchId));
+    const legacyQ = query(pronosticsRef, where('match_ref', '==', doc(db, 'matches', matchId)));
+    const [strictSnapshot, legacySnapshot] = await Promise.all([
+      getDocs(strictQ),
+      getDocs(legacyQ).catch(() => null)
+    ]);
     
     let winners = 0;
     let losers = 0;
+    const seen = new Set<string>();
     
     // Mettre à jour chaque pronostic
-    for (const docSnapshot of snapshot.docs) {
+    for (const docSnapshot of [...strictSnapshot.docs, ...(legacySnapshot?.docs || [])]) {
+      if (seen.has(docSnapshot.id)) continue;
+      seen.add(docSnapshot.id);
       const data = docSnapshot.data();
+      if (data.status !== 'pending') continue;
       const isWinner = data.prediction === result;
       const newStatus = isWinner ? 'won' : 'lost';
       

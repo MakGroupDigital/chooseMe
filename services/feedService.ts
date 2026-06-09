@@ -2,6 +2,7 @@ import { collectionGroup, getDocs, query, orderBy, collection, getDoc, doc } fro
 import { getFirestoreDb } from './firebase';
 import type { FeedPost } from '../types';
 import { sortVideosByAlgorithm } from './feedAlgorithm';
+import { normalizeEngagementCount } from '../utils/engagement';
 
 // Cache pour les infos utilisateur
 const userCache = new Map<string, { displayName: string; avatarUrl: string }>();
@@ -103,6 +104,18 @@ const getThumbnailUrl = (data: Record<string, any>, fallback = ''): string => {
 
   return fallback;
 };
+
+const COMMENT_COUNT_FIELDS = [
+  'num_comments',
+  'comments',
+  'commentCount',
+  'comment_count',
+  'commentsCount',
+  'numComments'
+];
+
+const getCommentCount = (data: Record<string, any>): number =>
+  Math.max(...COMMENT_COUNT_FIELDS.map((field) => normalizeEngagementCount(data[field])));
 
 /**
  * Récupère les infos utilisateur avec cache
@@ -212,9 +225,9 @@ export async function fetchVideoFeed(options?: {
           url: videoUrl,
           thumbnail: getThumbnailUrl(data, '/assets/images/app_launcher_icon.png'),
           caption: data.caption || data.description || '',
-          likes: data.likes || 0,
-          shares: data.shares || 0,
-          comments: data.comments || 0,
+          likes: normalizeEngagementCount(data.likes),
+          shares: normalizeEngagementCount(data.shares),
+          comments: getCommentCount(data),
           createdAt,
           hashtags,
           docPath: docSnap.ref.path
@@ -290,9 +303,9 @@ export async function fetchVideoFeed(options?: {
           url: videoUrl,
           thumbnail: getThumbnailUrl(data, data.post_photo || ''),
           caption: data.post_description || '',
-          likes: Array.isArray(data.likes) ? data.likes.length : 0,
-          shares: data.num_votes ?? 0,
-          comments: data.num_comments ?? 0,
+          likes: normalizeEngagementCount(data.likes),
+          shares: normalizeEngagementCount(data.num_votes),
+          comments: getCommentCount(data),
           createdAt,
           hashtags,
           docPath: docSnap.ref.path

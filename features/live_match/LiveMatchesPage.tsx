@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trophy, Clock, PlayCircle, RefreshCw, Wifi, WifiOff, TrendingUp } from 'lucide-react';
-import { Match, fetchTodayMatches, syncMatchesToFirestore, getMatchesFromFirestore } from '../../services/liveMatchService';
+import { Trophy, Clock, PlayCircle, RefreshCw, Wifi, TrendingUp } from 'lucide-react';
+import { Match, syncMatchesToFirestore, getMatchesFromFirestore } from '../../services/liveMatchService';
 
 const LiveMatchesPage: React.FC = () => {
   const [filter, setFilter] = useState<'live' | 'scheduled' | 'finished'>('live');
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [isFromCache, setIsFromCache] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,34 +26,17 @@ const LiveMatchesPage: React.FC = () => {
     try {
       if (!silent) setLoading(true);
       
-      // D'abord essayer de récupérer depuis Firestore
-      let firestoreMatches = await getMatchesFromFirestore();
-      
-      // Si pas de matchs dans Firestore ou données anciennes, synchroniser
-      if (firestoreMatches.length === 0) {
-        console.log('📥 Synchronisation depuis l\'API...');
-        try {
-          await syncMatchesToFirestore();
-          firestoreMatches = await getMatchesFromFirestore();
-        } catch (syncError) {
-          console.error('Erreur synchronisation:', syncError);
+      await syncMatchesToFirestore();
+      const firestoreMatches = await getMatchesFromFirestore();
+      setMatches(firestoreMatches);
+      setLastRefresh(new Date());
+
+      if (filter === 'live' && !firestoreMatches.some((match) => match.status === 'live')) {
+        if (firestoreMatches.some((match) => match.status === 'scheduled')) {
+          setFilter('scheduled');
+        } else if (firestoreMatches.some((match) => match.status === 'finished')) {
+          setFilter('finished');
         }
-      }
-      
-      // Si toujours pas de matchs, utiliser l'API directement
-      if (firestoreMatches.length === 0) {
-        console.log('📡 Récupération directe depuis l\'API...');
-        try {
-          const apiMatches = await fetchTodayMatches();
-          setMatches(apiMatches);
-          setIsFromCache(false);
-        } catch (apiError) {
-          console.error('Erreur API:', apiError);
-          setMatches([]);
-        }
-      } else {
-        setMatches(firestoreMatches);
-        setIsFromCache(false);
       }
     } catch (error) {
       console.error('Erreur chargement matchs:', error);
@@ -136,16 +119,10 @@ const LiveMatchesPage: React.FC = () => {
         
         <div className="flex items-center gap-2">
           <p className="text-white/40">Pronostiquez et gagnez des points</p>
-          {isFromCache && (
-            <span className="flex items-center gap-1 text-xs text-orange-400">
-              <WifiOff size={12} />
-              Cache
-            </span>
-          )}
-          {!isFromCache && !loading && (
+          {!loading && (
             <span className="flex items-center gap-1 text-xs text-[#19DB8A]">
               <Wifi size={12} />
-              En ligne
+              Données réelles{lastRefresh ? ` · ${lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
             </span>
           )}
         </div>

@@ -4,7 +4,8 @@ export enum UserType {
   RECRUITER = 'recruteur',
   CLUB = 'club',
   PRESS = 'presse',
-  VISITOR = 'visiteur'
+  VISITOR = 'visiteur',
+  ADMIN = 'admin'
 }
 
 export interface UserProfile {
@@ -12,6 +13,8 @@ export interface UserProfile {
   email: string;
   displayName: string;
   type: UserType;
+  role?: string;
+  isAdmin?: boolean;
   needsProfileType?: boolean;
   country: string;
   city?: string;
@@ -53,7 +56,18 @@ export interface PostComment {
   userAvatar?: string;
   text: string;
   createdAt: string;
-   likes: number;
+  likes: number;
+  replies?: PostCommentReply[];
+  replyCount?: number;
+}
+
+export interface PostCommentReply {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  text: string;
+  createdAt: string;
 }
 
 export interface NewsArticle {

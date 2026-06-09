@@ -52,6 +52,11 @@ const ModernOnboardingPage: React.FC = () => {
     navigate('/onboarding/type');
   };
 
+  const skipOnboarding = (event?: React.MouseEvent<HTMLButtonElement>) => {
+    event?.stopPropagation();
+    navigate('/onboarding/type');
+  };
+
   const goPrev = () => {
     setCurrentStep((prev) => Math.max(0, prev - 1));
   };
@@ -90,14 +95,15 @@ const ModernOnboardingPage: React.FC = () => {
         <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/62 to-transparent" />
       </div>
 
-      <div className="absolute top-4 left-0 right-0 px-5 z-10 flex items-center justify-between">
+      <div className="absolute top-4 left-0 right-0 px-5 z-40 flex items-center justify-between">
         <div className="bg-black/45 border border-white/10 rounded-full px-3 py-1.5">
           <p className="text-white text-xs font-bold tracking-wider">
             CHOOSE<span className="text-[#19DB8A]">-ME</span>
           </p>
         </div>
         <button
-          onClick={() => navigate('/login')}
+          type="button"
+          onClick={skipOnboarding}
           className="text-white/80 text-sm font-semibold h-9 px-3 rounded-full bg-black/45 border border-white/10"
         >
           Passer

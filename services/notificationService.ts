@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore';
 import { getFirebaseApp } from './firebase';
 
-export type AppNotificationType = 'message' | 'follow' | 'like';
+export type AppNotificationType = 'message' | 'follow' | 'like' | 'comment' | 'reply';
 
 export interface AppNotification {
   id: string;

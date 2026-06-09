@@ -1,4 +1,4 @@
-import { browserLocalPersistence, GoogleAuthProvider, setPersistence, signInWithPopup } from 'firebase/auth';
+import { browserLocalPersistence, GoogleAuthProvider, setPersistence, signInWithPopup, type UserCredential } from 'firebase/auth';
 import { getFirebaseAuth } from './firebase';
 
 export type GoogleAuthMode = 'login' | 'signup';
@@ -13,11 +13,11 @@ export function createGoogleProvider() {
   return provider;
 }
 
-export async function startGoogleAuth(mode: GoogleAuthMode = 'login'): Promise<void> {
+export async function startGoogleAuth(mode: GoogleAuthMode = 'login'): Promise<UserCredential> {
   sessionStorage.setItem('chooseMe.googleAuthMode', mode);
   const auth = getFirebaseAuth();
   await setPersistence(auth, browserLocalPersistence);
-  await signInWithPopup(auth, createGoogleProvider());
+  return signInWithPopup(auth, createGoogleProvider());
 }
 
 export function getGoogleAuthMode(): GoogleAuthMode {

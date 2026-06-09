@@ -27,7 +27,7 @@
   position: absolute;
   width: 6px;
   height: 6px;
-  background: #ef4444;
+  background: #19DB8A;
   border-radius: 50%;
   pointer-events: none;
   left: 50%;
@@ -35,7 +35,7 @@
   margin-left: -3px;
   margin-top: -3px;
   animation: particle-fly 0.7s ease-out forwards;
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+  box-shadow: 0 0 8px rgba(25, 219, 138, 0.85);
 }
 
 /* Animation de scale pour le coeur */
@@ -53,4 +53,23 @@
 
 .like-button-active {
   animation: heart-pop 0.3s ease-out;
+}
+
+.feed-like-particle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  margin-top: -3.5px;
+  border-radius: 9999px;
+  background: #19DB8A;
+  box-shadow: 0 0 12px rgba(25, 219, 138, 0.95);
+  pointer-events: none;
+  animation: particle-fly 0.78s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.feed-like-ring {
+  animation: pulse-ring 0.72s ease-out forwards;
 }
